@@ -1,0 +1,110 @@
+{
+ "bad": [
+  "poor",
+  "inferior",
+  "unacceptable",
+  "awful"
+ ],
+ "big": [
+  "large",
+  "substantial",
+  "sizable",
+  "enormous"
+ ],
+ "end": [
+  "finish",
+  "conclude",
+  "complete",
+  "terminate"
+ ],
+ "fast": [
+  "rapid",
+  "swift",
+  "quick",
+  "speedy"
+ ],
+ "get": [
+  "obtain",
+  "receive",
+  "acquire",
+  "gain"
+ ],
+ "good": [
+  "excellent",
+  "fine",
+  "superior",
+  "satisfactory"
+ ],
+ "happy": [
+  "delighted",
+  "glad",
+  "pleased",
+  "cheerful"
+ ],
+ "help": [
+  "assist",
+  "aid",
+  "support",
+  "facilitate"
+ ],
+ "important": [
+  "significant",
+  "crucial",
+  "essential",
+  "vital"
+ ],
+ "make": [
+  "create",
+  "produce",
+  "build",
+  "construct"
+ ],
+ "many": [
+  "numerous",
+  "abundant",
+  "plentiful",
+  "countless"
+ ],
+ "show": [
+  "display",
+  "reveal",
+  "demonstrate",
+  "exhibit"
+ ],
+ "slow": [
+  "gradual",
+  "leisurely",
+  "sluggish",
+  "unhurried"
+ ],
+ "small": [
+  "little",
+  "compact",
+  "modest",
+  "minor"
+ ],
+ "smart": [
+  "intelligent",
+  "clever",
+  "shrewd",
+  "wise"
+ ],
+ "start": [
+  "begin",
+  "commence",
+  "initiate",
+  "launch"
+ ],
+ "use": [
+  "utilize",
+  "employ",
+  "apply",
+  "leverage"
+ ],
+ "very": [
+  "extremely",
+  "highly",
+  "exceedingly",
+  "remarkably"
+ ]
+}
