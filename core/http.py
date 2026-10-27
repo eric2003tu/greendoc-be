@@ -8,11 +8,15 @@ from django.views.decorators.csrf import csrf_exempt
 
 
 class ApiError(Exception):
-    def __init__(self, message, status=400, code="bad_request"):
+    """`fields` maps a form field to its message so a UI can show errors inline."""
+
+    def __init__(self, message, status=400, code="bad_request", fields=None, headers=None):
         super().__init__(message)
         self.message = message
         self.status = status
         self.code = code
+        self.fields = fields
+        self.headers = headers or {}
 
 
 def parse_json(request):
@@ -27,8 +31,46 @@ def parse_json(request):
     return data
 
 
+def bearer_token(request):
+    header = request.headers.get("Authorization", "")
+    if not header:
+        return None
+    scheme, _, token = header.partition(" ")
+    if scheme.lower() != "bearer" or not token.strip():
+        raise ApiError("Authorization must be 'Bearer <token>'.", status=401, code="invalid_token")
+    return token.strip()
+
+
+def current_user(request):
+    """The signed-in user, or None for a guest. A bad or expired token is an
+    error (not a silent guest) so the app knows to ask the person to sign in again."""
+    if hasattr(request, "_greendoc_user"):
+        return request._greendoc_user
+    user = None
+    token = bearer_token(request)
+    if token:
+        from accounts.tokens import user_for_token  # local import: accounts depends on core
+
+        user = user_for_token(token)
+        if user is None:
+            raise ApiError("Your session has expired. Please sign in again.", status=401, code="invalid_token")
+    request._greendoc_user = user
+    return user
+
+
+def require_user(request):
+    user = current_user(request)
+    if user is None:
+        raise ApiError("Sign in to use this feature.", status=401, code="sign_in_required")
+    return user
+
+
 def client_id(request):
-    """Anonymous per-browser identity: a random UUID the frontend generates once."""
+    """Owner identity for stored data. Signed in: the account's owner id, the same on every
+    device. Guest: the random UUID the browser generated (X-Client-Id)."""
+    user = current_user(request)
+    if user is not None:
+        return user.profile.owner_id
     raw = request.headers.get("X-Client-Id", "")
     try:
         return uuid.UUID(raw)
@@ -56,9 +98,13 @@ def api_view(methods):
             try:
                 return view(request, *args, **kwargs)
             except ApiError as exc:
-                return JsonResponse(
-                    {"error": {"code": exc.code, "message": exc.message}}, status=exc.status
-                )
+                error = {"code": exc.code, "message": exc.message}
+                if exc.fields:
+                    error["fields"] = exc.fields
+                response = JsonResponse({"error": error}, status=exc.status)
+                for name, value in exc.headers.items():
+                    response[name] = value
+                return response
 
         return wrapper
 

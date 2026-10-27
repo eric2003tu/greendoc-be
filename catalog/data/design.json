@@ -1,0 +1,179 @@
+{
+ "themes": [
+  {
+   "id": "greenleaf",
+   "name": "Greenleaf",
+   "bodyFont": "Calibri, sans-serif",
+   "headingFont": "Calibri Light, sans-serif",
+   "accent": "#176b3b",
+   "soft": "#e4f0e6"
+  },
+  {
+   "id": "forest",
+   "name": "Forest",
+   "bodyFont": "Georgia, serif",
+   "headingFont": "Georgia, serif",
+   "accent": "#245b3c",
+   "soft": "#e7efe8"
+  },
+  {
+   "id": "sage",
+   "name": "Sage",
+   "bodyFont": "Segoe UI, sans-serif",
+   "headingFont": "Segoe UI Semibold, sans-serif",
+   "accent": "#58745a",
+   "soft": "#edf1e9"
+  },
+  {
+   "id": "olive",
+   "name": "Olive",
+   "bodyFont": "Arial, sans-serif",
+   "headingFont": "Arial, sans-serif",
+   "accent": "#66712d",
+   "soft": "#f0f1df"
+  },
+  {
+   "id": "formal",
+   "name": "Formal",
+   "bodyFont": "Cambria, serif",
+   "headingFont": "Cambria, serif",
+   "accent": "#365b42",
+   "soft": "#e8eee9"
+  },
+  {
+   "id": "editorial",
+   "name": "Editorial",
+   "bodyFont": "Garamond, serif",
+   "headingFont": "Georgia, serif",
+   "accent": "#76593c",
+   "soft": "#f2ece3"
+  },
+  {
+   "id": "minimal",
+   "name": "Minimal",
+   "bodyFont": "Arial, sans-serif",
+   "headingFont": "Arial, sans-serif",
+   "accent": "#454b46",
+   "soft": "#eeeeec"
+  },
+  {
+   "id": "modern",
+   "name": "Modern",
+   "bodyFont": "Verdana, sans-serif",
+   "headingFont": "Verdana, sans-serif",
+   "accent": "#286446",
+   "soft": "#e6f0e8"
+  }
+ ],
+ "styles": [
+  {
+   "name": "Normal",
+   "tag": "p",
+   "className": "w-s-normal"
+  },
+  {
+   "name": "No Spacing",
+   "tag": "p",
+   "className": "w-s-nospacing"
+  },
+  {
+   "name": "Heading 1",
+   "tag": "h1",
+   "className": "w-s-h1",
+   "size": 16,
+   "bold": true,
+   "color": "#2f5496",
+   "before": 12,
+   "after": 0
+  },
+  {
+   "name": "Heading 2",
+   "tag": "h2",
+   "className": "w-s-h2",
+   "size": 13,
+   "bold": true,
+   "color": "#2f5496",
+   "before": 10,
+   "after": 0
+  },
+  {
+   "name": "Heading 3",
+   "tag": "h3",
+   "className": "w-s-h3",
+   "size": 12,
+   "bold": true,
+   "color": "#1f3763",
+   "before": 10,
+   "after": 0
+  },
+  {
+   "name": "Title",
+   "tag": "h1",
+   "className": "w-s-title",
+   "size": 28,
+   "color": "#2f5496",
+   "after": 0
+  },
+  {
+   "name": "Subtitle",
+   "tag": "p",
+   "className": "w-s-subtitle",
+   "size": 11,
+   "italic": true,
+   "color": "#5a5a5a",
+   "after": 16
+  },
+  {
+   "name": "Quote",
+   "tag": "blockquote",
+   "className": "w-s-quote",
+   "italic": true,
+   "color": "#404040"
+  },
+  {
+   "name": "Intense Quote",
+   "tag": "blockquote",
+   "className": "w-s-intense-quote",
+   "italic": true,
+   "color": "#2f5496"
+  },
+  {
+   "name": "List Paragraph",
+   "tag": "p",
+   "className": "w-s-list-para"
+  },
+  {
+   "name": "Caption",
+   "tag": "p",
+   "className": "w-s-caption",
+   "size": 9,
+   "italic": true,
+   "color": "#44546a",
+   "after": 6
+  },
+  {
+   "name": "Emphasis",
+   "tag": "p",
+   "className": "w-s-emphasis",
+   "italic": true
+  },
+  {
+   "name": "Strong",
+   "tag": "p",
+   "className": "w-s-strong",
+   "bold": true
+  },
+  {
+   "name": "Subtle Emphasis",
+   "tag": "p",
+   "className": "w-s-subtle-emph",
+   "italic": true,
+   "color": "#5a5a5a"
+  },
+  {
+   "name": "Code",
+   "tag": "pre",
+   "className": "w-s-code"
+  }
+ ]
+}

@@ -6,4 +6,8 @@ urlpatterns = [
     path("api/", include("core.urls")),
     path("api/", include("documents.urls")),
     path("api/", include("proofing.urls")),
+    path("api/", include("catalog.urls")),
+    path("api/", include("workspace.urls")),
+    path("api/", include("accounts.urls")),
+    path("api/", include("support.urls")),
 ]

@@ -1,6 +1,10 @@
+from html import escape
+
 from django.http import JsonResponse
 
 from core.http import ApiError, api_view, parse_json
+
+from documents.services import document_stats
 
 from . import services
 
@@ -24,6 +28,24 @@ def spellcheck(request):
 @api_view(["POST"])
 def readability(request):
     return JsonResponse(services.readability(_text(request)))
+
+
+@api_view(["POST"])
+def stats(request):
+    """Word count for raw text or editor HTML (Review > Word Count)."""
+    data = parse_json(request)
+    if "html" in data:
+        html = data["html"]
+        if not isinstance(html, str):
+            raise ApiError("html must be a string.", code="invalid_html")
+    else:
+        text = data.get("text")
+        if not isinstance(text, str):
+            raise ApiError("Send either html or text as a string.", code="invalid_text")
+        html = "".join(f"<p>{escape(line, quote=False)}</p>" for line in text.splitlines())
+    if len(html) > MAX_TEXT * 5:
+        raise ApiError("Input is too long.", status=413, code="too_large")
+    return JsonResponse(document_stats(html))
 
 
 @api_view(["GET"])

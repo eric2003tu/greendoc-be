@@ -46,6 +46,10 @@ INSTALLED_APPS = [
     'core',
     'documents',
     'proofing',
+    'catalog',
+    'workspace',
+    'accounts',
+    'support',
 ]
 
 MIDDLEWARE = [
@@ -133,7 +137,7 @@ STATIC_URL = 'static/'
 
 MAILERS = {
     'default': {
-        'BACKEND': 'django.core.mail.backends.console.EmailBackend',
+        'BACKEND': os.environ.get('GREENDOC_EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend'),
     },
 }
 
@@ -146,3 +150,15 @@ CORS_ALLOWED_ORIGINS = [
 # Requests per IP per minute on /api/ (0 disables). Public API, so keep it on.
 RATE_LIMIT_PER_MINUTE = int(os.environ.get('GREENDOC_RATE_LIMIT', '240'))
 DATA_UPLOAD_MAX_MEMORY_SIZE = 6 * 1024 * 1024
+
+# Accounts and email
+# Emails print to the console in development; set GREENDOC_EMAIL_BACKEND (e.g. SMTP) in production.
+DEFAULT_FROM_EMAIL = os.environ.get('GREENDOC_FROM_EMAIL', 'GreenDoc <no-reply@greendoc.local>')
+SUPPORT_EMAIL = os.environ.get('GREENDOC_SUPPORT_EMAIL', 'support@greendoc.local')
+# Where the web app lives; used for links in emails (password reset, invitations).
+FRONTEND_URL = os.environ.get('GREENDOC_FRONTEND_URL', 'http://localhost:8080').rstrip('/')
+
+# Shared demo account (created by `python manage.py seed_demo`). Its credentials are public on
+# purpose, so it cannot be deleted and its password and email cannot be changed.
+DEMO_EMAIL = os.environ.get('GREENDOC_DEMO_EMAIL', 'demo@greendoc.app')
+DEMO_PASSWORD = os.environ.get('GREENDOC_DEMO_PASSWORD', 'GreenDoc-demo-2026')
