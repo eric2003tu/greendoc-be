@@ -20,6 +20,27 @@ from django.core.exceptions import ImproperlyConfigured
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
+def _load_env_file(path):
+    """Reads KEY=value lines from a .env file into the environment. Real environment variables win, so a
+    value set on the host still overrides the file. The file holds secrets: it is git-ignored, never commit it."""
+    try:
+        lines = Path(path).read_text(encoding='utf-8').splitlines()
+    except OSError:
+        return
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith('#') or '=' not in line:
+            continue
+        key, _, value = line.partition('=')
+        os.environ.setdefault(key.strip().removeprefix('export ').strip(), value.strip().strip('"').strip("'"))
+
+
+# On your computer: a .env file next to manage.py. On Render: upload it as a Secret File named .env
+# (Render makes it available at /etc/secrets/.env).
+_load_env_file(BASE_DIR / '.env')
+_load_env_file('/etc/secrets/.env')
+
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
 
@@ -118,6 +139,8 @@ if os.environ.get('DATABASE_URL'):
     import dj_database_url
 
     DATABASES['default'] = dj_database_url.parse(os.environ['DATABASE_URL'], conn_max_age=300, conn_health_checks=True)
+    # Neon's "-pooler" address goes through a connection pooler, which cannot keep server-side cursors.
+    DATABASES['default']['DISABLE_SERVER_SIDE_CURSORS'] = '-pooler' in os.environ['DATABASE_URL']
 
 
 # Password validation
