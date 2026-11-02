@@ -11,7 +11,10 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
 import os
+from importlib.util import find_spec
 from pathlib import Path
+
+from django.core.exceptions import ImproperlyConfigured
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -28,10 +31,22 @@ SECRET_KEY = os.environ.get(
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('GREENDOC_DEBUG', '1') == '1'
+if not DEBUG and 'insecure' in SECRET_KEY:
+    raise ImproperlyConfigured('Set GREENDOC_SECRET_KEY to a long random value when GREENDOC_DEBUG=0.')
 
 ALLOWED_HOSTS = [
-    h.strip() for h in os.environ.get('GREENDOC_ALLOWED_HOSTS', 'localhost,127.0.0.1,testserver').split(',') if h.strip()
+    h.strip()
+    for h in os.environ.get('GREENDOC_ALLOWED_HOSTS', 'localhost,127.0.0.1,testserver,.trycloudflare.com').split(',')
+    if h.strip()
 ]
+# Render tells the app its own address; allow it without any setup.
+if os.environ.get('RENDER_EXTERNAL_HOSTNAME'):
+    ALLOWED_HOSTS.append(os.environ['RENDER_EXTERNAL_HOSTNAME'])
+# Behind a tunnel or proxy that terminates https, build https links (download addresses in the update file).
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+# Take the caller's address from X-Forwarded-For (rate limits and sign-in locks work per person, not per proxy).
+# Only turn this on behind a proxy you trust, such as Render.
+TRUST_PROXY_HEADERS = os.environ.get('GREENDOC_TRUST_PROXY', '0') == '1'
 
 
 # Application definition
@@ -51,12 +66,15 @@ INSTALLED_APPS = [
     'accounts',
     'support',
     'learning',
+    'desktop',
 ]
 
 MIDDLEWARE = [
     'core.middleware.CorsMiddleware',
     'core.middleware.RateLimitMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    # Serves the admin's CSS on a host with no web server in front (Render). Optional locally.
+    *(['whitenoise.middleware.WhiteNoiseMiddleware'] if find_spec('whitenoise') else []),
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -91,9 +109,15 @@ WSGI_APPLICATION = 'greendoc.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'NAME': os.environ.get('GREENDOC_DB', BASE_DIR / 'db.sqlite3'),
     }
 }
+# A hosted Postgres (Neon, Supabase...) replaces SQLite when DATABASE_URL is set. Render's own disk is wiped on
+# every restart, so a file database would lose everything there.
+if os.environ.get('DATABASE_URL'):
+    import dj_database_url
+
+    DATABASES['default'] = dj_database_url.parse(os.environ['DATABASE_URL'], conn_max_age=300, conn_health_checks=True)
 
 
 # Password validation
@@ -131,6 +155,7 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 
 # Email
@@ -151,6 +176,39 @@ CORS_ALLOWED_ORIGINS = [
 # Requests per IP per minute on /api/ (0 disables). Public API, so keep it on.
 RATE_LIMIT_PER_MINUTE = int(os.environ.get('GREENDOC_RATE_LIMIT', '240'))
 DATA_UPLOAD_MAX_MEMORY_SIZE = 6 * 1024 * 1024
+
+# Uploaded files (the Windows app's installers). Keep this folder out of git, and back it up.
+MEDIA_ROOT = Path(os.environ.get('GREENDOC_MEDIA_ROOT', BASE_DIR / 'media'))
+
+# Where uploaded files live. On this computer: MEDIA_ROOT. On Render (a wiped disk): any S3-compatible bucket,
+# such as Cloudflare R2's free tier. Set GREENDOC_S3_BUCKET, GREENDOC_S3_ENDPOINT, GREENDOC_S3_KEY_ID and
+# GREENDOC_S3_SECRET.
+STORAGES = {
+    'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+    'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
+}
+if os.environ.get('GREENDOC_S3_BUCKET'):
+    STORAGES['default'] = {
+        'BACKEND': 'storages.backends.s3.S3Storage',
+        'OPTIONS': {
+            'bucket_name': os.environ['GREENDOC_S3_BUCKET'],
+            'endpoint_url': os.environ['GREENDOC_S3_ENDPOINT'],
+            'access_key': os.environ['GREENDOC_S3_KEY_ID'],
+            'secret_key': os.environ['GREENDOC_S3_SECRET'],
+            'region_name': os.environ.get('GREENDOC_S3_REGION', 'auto'),
+            'signature_version': 's3v4',
+            'querystring_auth': True,  # private bucket: downloads use short-lived signed links
+            'querystring_expire': 3600,
+            'file_overwrite': False,
+        },
+    }
+
+# Where the Windows app's source code is, so the engine page can build and publish a new installer by itself.
+# Defaults to the greenleaf-word-studio folder next to this project; empty when it is not there.
+_default_app_source = BASE_DIR.parent / 'greenleaf-word-studio'
+DESKTOP_APP_SOURCE = os.environ.get(
+    'GREENDOC_APP_SOURCE', str(_default_app_source) if _default_app_source.is_dir() else ''
+)
 
 # Accounts and email
 # Emails print to the console in development; set GREENDOC_EMAIL_BACKEND (e.g. SMTP) in production.

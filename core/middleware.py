@@ -4,6 +4,8 @@ from django.conf import settings
 from django.core.cache import cache
 from django.http import HttpResponse, JsonResponse
 
+from .http import client_ip
+
 ALLOWED_HEADERS = "Content-Type, X-Client-Id, Authorization"
 ALLOWED_METHODS = "GET, POST, PUT, DELETE, OPTIONS"
 
@@ -48,7 +50,7 @@ class RateLimitMiddleware:
     def __call__(self, request):
         limit = settings.RATE_LIMIT_PER_MINUTE
         if limit and request.path.startswith("/api/") and request.method != "OPTIONS":
-            ip = request.META.get("REMOTE_ADDR", "unknown")
+            ip = client_ip(request)
             window = int(time.time() // 60)
             key = f"rl:{ip}:{window}"
             cache.add(key, 0, timeout=120)

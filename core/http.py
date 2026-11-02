@@ -3,8 +3,19 @@ import json
 import uuid
 from functools import wraps
 
+from django.conf import settings
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
+
+
+def client_ip(request):
+    """The caller's address. Behind a proxy (Render, a tunnel) every request arrives from the proxy, so with
+    GREENDOC_TRUST_PROXY=1 the address the proxy reports in X-Forwarded-For is used instead."""
+    if getattr(settings, "TRUST_PROXY_HEADERS", False):
+        forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "").split(",")[0].strip()
+        if forwarded:
+            return forwarded[:64]
+    return request.META.get("REMOTE_ADDR", "unknown")
 
 
 class ApiError(Exception):

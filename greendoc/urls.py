@@ -11,4 +11,5 @@ urlpatterns = [
     path("api/", include("accounts.urls")),
     path("api/", include("support.urls")),
     path("api/", include("learning.urls")),
+    path("api/", include("desktop.urls")),
 ]

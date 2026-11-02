@@ -9,7 +9,7 @@ from django.core.mail import send_mail
 from django.http import HttpResponse, JsonResponse
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 
-from core.http import ApiError, api_view, bearer_token, parse_json, require_user
+from core.http import ApiError, api_view, bearer_token, client_ip, parse_json, require_user
 
 from . import services, tokens
 from .models import AuthToken
@@ -33,7 +33,7 @@ def _guard_demo(user):
 
 
 def _ip(request):
-    return request.META.get("REMOTE_ADDR", "unknown")
+    return client_ip(request)
 
 
 def _guest_id(request):

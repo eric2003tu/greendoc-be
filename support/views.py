@@ -4,7 +4,7 @@ from django.core.mail import send_mail
 from django.http import JsonResponse
 
 from accounts import services as account_services
-from core.http import ApiError, api_view, current_user, parse_json
+from core.http import ApiError, api_view, client_ip, current_user, parse_json
 
 from .models import SupportMessage
 
@@ -30,7 +30,7 @@ def contact_support(request):
     if problems:
         raise ApiError("Please check the highlighted fields.", code="invalid_field", fields=problems)
 
-    ip = request.META.get("REMOTE_ADDR", "unknown")
+    ip = client_ip(request)
     key = f"support:{ip}"
     cache.add(key, 0, timeout=3600)
     if cache.incr(key) > PER_HOUR:
