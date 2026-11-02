@@ -33,18 +33,14 @@ its own disk: the database is a free Postgres (Neon) and the Windows installers 
 - Windows app: put the address in `greenleaf-word-studio/.env.desktop` (`VITE_API_URL=...`).
 - Website: set `VITE_API_URL` to the same address when it is built.
 
-## 5. Publish the Windows app
-The server cannot build the installer (no Rust, no signing key), so build on your computer and upload it:
+## 5. Publish the Windows app (automatic)
+The server cannot build the installer (no Rust, no signing key), so GitHub builds it. Do the one-time setup in
+`greenleaf-word-studio/DESKTOP.md` under **Automatic releases** (a GitHub token for the server, and the signing key
+and publish key for GitHub). After that, an administrator opens `/engine`, presses **Publish update**, and waits:
+GitHub builds, signs and uploads the installer, and apps update when someone presses the refresh button.
 
-```
-$env:GREENDOC_SERVER = "https://greendoc-api.onrender.com"
-$env:GREENDOC_ADMIN_EMAIL = "you@example.com"
-$env:GREENDOC_ADMIN_PASSWORD = "..."
-npm run release
-```
-
-Apps then update when someone presses the refresh button. The first request after the service has slept can take
-about a minute.
+Prefer to do it by hand? `npm run release` on your computer builds and uploads the same way (set
+`GREENDOC_SERVER`, `GREENDOC_ADMIN_EMAIL` and `GREENDOC_ADMIN_PASSWORD` first).
 
 ## Notes
 - Run **one** worker (the start script does): rate limits and sign-in lockouts are counted in memory.

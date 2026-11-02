@@ -13,7 +13,7 @@ from core.http import ApiError
 from desktop import builder
 from desktop.models import DesktopRelease
 
-from .test_releases import SIGNATURE
+from .test_releases import SIGNATURE, installer, manifest
 
 User = get_user_model()
 MEDIA = tempfile.mkdtemp(prefix="greendoc-test-media-")
@@ -138,3 +138,118 @@ class RemoteStorageTests(TestCase):
             response = self.client.get("/api/desktop/download/0.3.0/")
         self.assertEqual(response.status_code, 302)
         self.assertTrue(response["Location"].startswith("https://bucket.example/"))
+
+
+def run_info(status="in_progress", conclusion=None, created=None):
+    from datetime import datetime, timedelta, timezone
+
+    stamp = (created or datetime.now(timezone.utc) - timedelta(seconds=90)).isoformat()
+    return {"workflow_runs": [{"status": status, "conclusion": conclusion, "created_at": stamp,
+                               "run_started_at": stamp, "updated_at": stamp, "html_url": "https://github.com/o/r/actions/runs/1"}]}
+
+
+@override_settings(
+    MEDIA_ROOT=MEDIA,
+    DESKTOP_APP_SOURCE="",
+    GITHUB_TOKEN="ghp_fake",
+    GITHUB_REPO="owner/repo",
+    GITHUB_WORKFLOW="desktop-release.yml",
+    GITHUB_REF="main",
+    DESKTOP_PUBLISH_KEY="k" * 32,
+)
+class GithubBuildTests(TestCase):
+    """The server has no Rust (Render): the button starts a GitHub workflow that builds and uploads the installer."""
+
+    @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+        shutil.rmtree(MEDIA, ignore_errors=True)
+
+    def setUp(self):
+        cache.clear()
+        builder.reset()
+        shutil.rmtree(MEDIA, ignore_errors=True)
+        admin = User.objects.create_user("boss@example.com", "boss@example.com", "pw", is_staff=True)
+        self.admin = {"HTTP_AUTHORIZATION": f"Bearer {issue_token(admin)[0]}"}
+
+    def test_a_server_connected_to_github_can_build_without_the_source(self):
+        with mock.patch("desktop.builder._github", return_value={"workflow_runs": []}):
+            body = self.client.get("/api/desktop/build/", **self.admin).json()
+        self.assertTrue(body["available"])
+        self.assertEqual(body["status"], "idle")
+
+    def test_pressing_the_button_starts_the_workflow_on_the_configured_branch(self):
+        calls = []
+
+        def github(method, path, body=None):
+            calls.append((method, path, body))
+            return {"workflow_runs": []}
+
+        with mock.patch("desktop.builder._github", github):
+            response = self.client.post("/api/desktop/build/", **self.admin)
+        self.assertEqual(response.status_code, 202)
+        post = [c for c in calls if c[0] == "POST"]
+        self.assertEqual(post, [("POST", "/repos/owner/repo/actions/workflows/desktop-release.yml/dispatches", {"ref": "main"})])
+        # GitHub has not listed the new run yet, but the page already shows it is starting
+        self.assertEqual(response.json()["status"], "building")
+
+    def test_a_running_build_is_reported_and_not_started_twice(self):
+        calls = []
+
+        def github(method, path, body=None):
+            calls.append(method)
+            return run_info("in_progress")
+
+        with mock.patch("desktop.builder._github", github):
+            builder.start("boss@example.com")
+            body = self.client.get("/api/desktop/build/", **self.admin).json()
+        self.assertEqual(body["status"], "building")
+        self.assertGreaterEqual(body["elapsedSeconds"], 80)
+        self.assertNotIn("POST", calls)
+
+    def test_a_finished_build_reports_the_published_version(self):
+        DesktopRelease.objects.create(version="0.4.0", signature=SIGNATURE, size=1_300_000, installer="x.exe")
+        with mock.patch("desktop.builder._github", return_value=run_info("completed", "success")):
+            body = self.client.get("/api/desktop/build/", **self.admin).json()
+        self.assertEqual(body["status"], "done")
+        self.assertEqual(body["version"], "0.4.0")
+
+    def test_a_failed_build_points_to_the_run(self):
+        with mock.patch("desktop.builder._github", return_value=run_info("completed", "failure")):
+            body = self.client.get("/api/desktop/build/", **self.admin).json()
+        self.assertEqual(body["status"], "failed")
+        self.assertIn("https://github.com/o/r/actions/runs/1", body["message"])
+
+    def test_a_bad_token_is_explained(self):
+        def refused(method, path, body=None):
+            raise ApiError(builder._github_error(401), status=502, code="github_error")
+
+        with mock.patch("desktop.builder._github", refused):
+            body = self.client.get("/api/desktop/build/", **self.admin).json()
+        self.assertEqual(body["status"], "failed")
+        self.assertIn("token", body["message"])
+
+    # --- the workflow uploads the installer with the shared publish key ---
+
+    def upload(self, key=None, version="0.5.0"):
+        headers = {"HTTP_X_PUBLISH_KEY": key} if key is not None else {}
+        data = {"installer": installer(version), "manifest": manifest(version), "notes": "From GitHub"}
+        return self.client.post("/api/desktop/releases/", data, **headers)
+
+    def test_the_github_build_can_publish_with_the_key(self):
+        response = self.upload("k" * 32)
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(DesktopRelease.objects.get(version="0.5.0").created_by, "GitHub build")
+
+    def test_a_wrong_or_missing_key_cannot_publish(self):
+        self.assertEqual(self.upload("x" * 32).status_code, 401)
+        self.assertEqual(self.upload().status_code, 401)
+        self.assertEqual(DesktopRelease.objects.count(), 0)
+
+    @override_settings(DESKTOP_PUBLISH_KEY="short")
+    def test_a_short_key_is_never_accepted(self):
+        self.assertEqual(self.upload("short").status_code, 401)
+
+    def test_the_key_does_not_open_the_admin_list(self):
+        response = self.client.get("/api/desktop/releases/", HTTP_X_PUBLISH_KEY="k" * 32)
+        self.assertEqual(response.status_code, 401)

@@ -72,8 +72,9 @@ def build_paths():
             "get": op("Desktop app", "List published versions", "listDesktopReleases",
                       "Administrators only.", ok="DesktopReleaseList"),
             "post": op("Desktop app", "Publish a new version", "publishDesktopRelease",
-                       "Administrators only. Upload the installer and the `latest.json` the build wrote, from the same "
-                       "build. The version must be higher than the newest published one.",
+                       "Administrators only (or the GitHub build, which presents the shared key in the `X-Publish-Key` header). "
+                       "Upload the installer and the `latest.json` the build wrote, from the same build. The version "
+                       "must be higher than the newest published one.",
                        ok="DesktopRelease", ok_code="201", ok_description="Published.", errors=("400", "409"),
                        multipart={"multipart/form-data": {"schema": {
                            "type": "object", "required": ["installer", "manifest"],

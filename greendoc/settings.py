@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
 import os
+import sys
 from importlib.util import find_spec
 from pathlib import Path
 
@@ -135,7 +136,8 @@ DATABASES = {
 }
 # A hosted Postgres (Neon, Supabase...) replaces SQLite when DATABASE_URL is set. Render's own disk is wiped on
 # every restart, so a file database would lose everything there.
-if os.environ.get('DATABASE_URL'):
+# Tests always use a throwaway SQLite database, never the hosted one.
+if os.environ.get('DATABASE_URL') and not (len(sys.argv) > 1 and sys.argv[1] == 'test'):
     import dj_database_url
 
     DATABASES['default'] = dj_database_url.parse(os.environ['DATABASE_URL'], conn_max_age=300, conn_health_checks=True)
@@ -232,6 +234,14 @@ _default_app_source = BASE_DIR.parent / 'greenleaf-word-studio'
 DESKTOP_APP_SOURCE = os.environ.get(
     'GREENDOC_APP_SOURCE', str(_default_app_source) if _default_app_source.is_dir() else ''
 )
+
+# Building the installer on GitHub's free Windows machines, for a host with no Rust (Render). The token needs
+# "Actions: read and write" on the repository. The publish key lets that workflow upload the finished installer.
+GITHUB_TOKEN = os.environ.get('GREENDOC_GITHUB_TOKEN', '')
+GITHUB_REPO = os.environ.get('GREENDOC_GITHUB_REPO', '')  # owner/name
+GITHUB_WORKFLOW = os.environ.get('GREENDOC_GITHUB_WORKFLOW', 'desktop-release.yml')
+GITHUB_REF = os.environ.get('GREENDOC_GITHUB_REF', 'main')
+DESKTOP_PUBLISH_KEY = os.environ.get('GREENDOC_PUBLISH_KEY', '')
 
 # Accounts and email
 # Emails print to the console in development; set GREENDOC_EMAIL_BACKEND (e.g. SMTP) in production.

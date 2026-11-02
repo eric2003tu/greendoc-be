@@ -1,3 +1,6 @@
+import hmac
+
+from django.conf import settings
 from django.core.files.storage import FileSystemStorage
 from django.http import FileResponse, HttpResponse, HttpResponseRedirect, JsonResponse
 
@@ -68,11 +71,20 @@ def latest_info(request):
     )
 
 
+def _publisher(request):
+    """Who is publishing: the GitHub build (it presents the shared publish key) or a signed-in administrator."""
+    key = settings.DESKTOP_PUBLISH_KEY
+    given = request.META.get("HTTP_X_PUBLISH_KEY", "")
+    if len(key) >= 24 and given and hmac.compare_digest(given.encode(), key.encode()):
+        return "GitHub build"
+    return require_admin(request).email
+
+
 @api_view(["GET", "POST"])
 def releases(request):
     """Administrators: the published versions, and publish a new one (installer + latest.json)."""
-    admin = require_admin(request)
     if request.method == "POST":
+        publisher = _publisher(request)
         installer = request.FILES.get("installer")
         manifest = request.FILES.get("manifest")
         if installer is None or manifest is None:
@@ -80,9 +92,10 @@ def releases(request):
                 "Choose both files: the installer (.exe) and latest.json from the same build.",
                 code="missing_files",
             )
-        release = services.publish(installer, manifest, request.POST.get("notes", ""), admin.email)
+        release = services.publish(installer, manifest, request.POST.get("notes", ""), publisher)
         latest = services.latest_published()
         return JsonResponse(services.dto(release, latest.version if latest else ""), status=201)
+    require_admin(request)
     latest = services.latest_published()
     latest_version = latest.version if latest else ""
     rows = sorted(DesktopRelease.objects.all(), key=lambda r: services.version_key(r.version), reverse=True)
