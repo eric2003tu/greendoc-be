@@ -25,3 +25,25 @@ class DesktopRelease(models.Model):
 
     def __str__(self):
         return f"GreenDoc {self.version}"
+
+
+class BuildRequest(models.Model):
+    """"Publish update" pressed on the engine page, waiting for the build computer's release agent.
+
+    Kept in the database (not memory) so it survives the server sleeping or restarting."""
+
+    REQUESTED, BUILDING, DONE, FAILED = "requested", "building", "done", "failed"
+    STATUSES = [(REQUESTED, "Waiting"), (BUILDING, "Building"), (DONE, "Done"), (FAILED, "Failed")]
+
+    status = models.CharField(max_length=10, choices=STATUSES, default=REQUESTED)
+    requested_by = models.EmailField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    version = models.CharField(max_length=20, blank=True)
+    message = models.TextField(blank=True)
+    last_line = models.CharField(max_length=300, blank=True)
+
+    class Meta:
+        ordering = ["-id"]

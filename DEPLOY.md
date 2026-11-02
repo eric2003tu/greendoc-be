@@ -34,13 +34,12 @@ its own disk: the database is a free Postgres (Neon) and the Windows installers 
 - Website: set `VITE_API_URL` to the same address when it is built.
 
 ## 5. Publish the Windows app (automatic)
-The server cannot build the installer (no Rust, no signing key), so GitHub builds it. Do the one-time setup in
-`greenleaf-word-studio/DESKTOP.md` under **Automatic releases** (a GitHub token for the server, and the signing key
-and publish key for GitHub). After that, an administrator opens `/engine`, presses **Publish update**, and waits:
-GitHub builds, signs and uploads the installer, and apps update when someone presses the refresh button.
-
-Prefer to do it by hand? `npm run release` on your computer builds and uploads the same way (set
-`GREENDOC_SERVER`, `GREENDOC_ADMIN_EMAIL` and `GREENDOC_ADMIN_PASSWORD` first).
+The server cannot build the installer (no Rust, no signing key). A small "release agent" on your own computer does it:
+in `greenleaf-word-studio` run `npm run agent:install` once. After that an administrator opens `/engine`, presses
+**Publish update**, and the agent builds, signs and uploads the installer; apps update when someone presses the refresh
+button. Needs `GREENDOC_PUBLISH_KEY` on the server (already in `render.env`) and the same value in the app folder's
+`.env.agent`. Details in `greenleaf-word-studio/DESKTOP.md` ("Automatic releases"). Building on GitHub instead is
+described there too.
 
 ## Notes
 - Run **one** worker (the start script does): rate limits and sign-in lockouts are counted in memory.

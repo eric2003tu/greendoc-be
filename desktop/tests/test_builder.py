@@ -239,7 +239,7 @@ class GithubBuildTests(TestCase):
     def test_the_github_build_can_publish_with_the_key(self):
         response = self.upload("k" * 32)
         self.assertEqual(response.status_code, 201)
-        self.assertEqual(DesktopRelease.objects.get(version="0.5.0").created_by, "GitHub build")
+        self.assertEqual(DesktopRelease.objects.get(version="0.5.0").created_by, "Build computer")
 
     def test_a_wrong_or_missing_key_cannot_publish(self):
         self.assertEqual(self.upload("x" * 32).status_code, 401)
@@ -253,3 +253,79 @@ class GithubBuildTests(TestCase):
     def test_the_key_does_not_open_the_admin_list(self):
         response = self.client.get("/api/desktop/releases/", HTTP_X_PUBLISH_KEY="k" * 32)
         self.assertEqual(response.status_code, 401)
+
+
+@override_settings(MEDIA_ROOT=MEDIA, DESKTOP_APP_SOURCE="", GITHUB_TOKEN="", GITHUB_REPO="", DESKTOP_PUBLISH_KEY="a" * 32)
+class AgentBuildTests(TestCase):
+    """No GitHub, no source on the server: a release agent on the build computer does the building."""
+
+    KEY = {"HTTP_X_PUBLISH_KEY": "a" * 32}
+
+    @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+        shutil.rmtree(MEDIA, ignore_errors=True)
+
+    def setUp(self):
+        cache.clear()
+        builder.reset()
+        admin = User.objects.create_user("boss@example.com", "boss@example.com", "pw", is_staff=True)
+        self.admin = {"HTTP_AUTHORIZATION": f"Bearer {issue_token(admin)[0]}"}
+
+    def status(self):
+        return self.client.get("/api/desktop/build/", **self.admin).json()
+
+    def test_the_button_is_available_and_waits_when_the_build_computer_is_off(self):
+        self.assertTrue(self.status()["available"])
+        self.assertEqual(self.client.post("/api/desktop/build/", **self.admin).status_code, 202)
+        body = self.status()
+        self.assertEqual(body["status"], "building")
+        self.assertIn("off", body["lastLine"])
+
+    def test_the_agent_picks_up_a_request_builds_and_reports(self):
+        self.client.post("/api/desktop/build/", **self.admin)
+        job = self.client.get("/api/desktop/agent/next/", **self.KEY).json()["request"]
+        self.assertIsNotNone(job)
+        self.assertEqual(self.client.get("/api/desktop/agent/next/", **self.KEY).json(), {"request": None})  # taken
+        self.client.post(f"/api/desktop/agent/{job['id']}/", {"line": "Compiling greendoc"}, content_type="application/json", **self.KEY)
+        self.assertEqual(self.status()["lastLine"], "Compiling greendoc")
+        # the agent uploads with the same key, then says it is done
+        upload = self.client.post("/api/desktop/releases/", {"installer": installer("0.6.0"), "manifest": manifest("0.6.0"), "notes": "x"}, **self.KEY)
+        self.assertEqual(upload.status_code, 201)
+        self.client.post(f"/api/desktop/agent/{job['id']}/", {"status": "done"}, content_type="application/json", **self.KEY)
+        body = self.status()
+        self.assertEqual((body["status"], body["version"]), ("done", "0.6.0"))
+
+    def test_the_agent_can_report_a_failure(self):
+        self.client.post("/api/desktop/build/", **self.admin)
+        job = self.client.get("/api/desktop/agent/next/", **self.KEY).json()["request"]
+        self.client.post(f"/api/desktop/agent/{job['id']}/", {"status": "failed", "message": "linker not found"}, content_type="application/json", **self.KEY)
+        body = self.status()
+        self.assertEqual(body["status"], "failed")
+        self.assertIn("linker", body["message"])
+
+    def test_a_second_press_while_one_is_waiting_does_not_queue_another(self):
+        from desktop.models import BuildRequest
+
+        self.client.post("/api/desktop/build/", **self.admin)
+        self.client.post("/api/desktop/build/", **self.admin)
+        self.assertEqual(BuildRequest.objects.count(), 1)
+
+    def test_only_the_key_opens_the_agent_endpoints(self):
+        self.assertEqual(self.client.get("/api/desktop/agent/next/").status_code, 401)
+        self.assertEqual(self.client.get("/api/desktop/agent/next/", HTTP_X_PUBLISH_KEY="b" * 32).status_code, 401)
+        self.assertEqual(self.client.get("/api/desktop/agent/next/", **self.admin).status_code, 401)
+        self.assertEqual(self.client.post("/api/desktop/agent/1/", {}, content_type="application/json").status_code, 401)
+
+    def test_a_build_that_goes_silent_is_marked_failed(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from desktop.models import BuildRequest
+
+        row = BuildRequest.objects.create(status=BuildRequest.BUILDING, started_at=timezone.now())
+        BuildRequest.objects.filter(id=row.id).update(updated_at=timezone.now() - timedelta(hours=1))
+        body = self.status()
+        self.assertEqual(body["status"], "failed")
+        self.assertIn("stopped answering", body["message"])

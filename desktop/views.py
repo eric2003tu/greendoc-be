@@ -1,13 +1,14 @@
 import hmac
+from datetime import datetime, timezone
 
 from django.conf import settings
 from django.core.files.storage import FileSystemStorage
 from django.http import FileResponse, HttpResponse, HttpResponseRedirect, JsonResponse
 
-from core.http import ApiError, api_view, require_admin
+from core.http import ApiError, api_view, parse_json, require_admin
 
 from . import builder, services
-from .models import DesktopRelease
+from .models import BuildRequest, DesktopRelease
 
 
 @api_view(["GET"])
@@ -71,12 +72,16 @@ def latest_info(request):
     )
 
 
-def _publisher(request):
-    """Who is publishing: the GitHub build (it presents the shared publish key) or a signed-in administrator."""
+def _has_publish_key(request):
     key = settings.DESKTOP_PUBLISH_KEY
     given = request.META.get("HTTP_X_PUBLISH_KEY", "")
-    if len(key) >= 24 and given and hmac.compare_digest(given.encode(), key.encode()):
-        return "GitHub build"
+    return len(key) >= 24 and bool(given) and hmac.compare_digest(given.encode(), key.encode())
+
+
+def _publisher(request):
+    """Who is publishing: a build machine (it presents the shared publish key) or a signed-in administrator."""
+    if _has_publish_key(request):
+        return "Build computer"
     return require_admin(request).email
 
 
@@ -122,3 +127,46 @@ def release(request, version):
     row.installer.delete(save=False)
     row.delete()
     return HttpResponse(status=204)
+
+
+@api_view(["GET"])
+def agent_next(request):
+    """The release agent on the build computer asks: was a build requested? Answers with its id, or null. Also
+    tells the server the agent is online."""
+    if not _has_publish_key(request):
+        raise ApiError("Not allowed.", status=401, code="unauthorized")
+    builder.mark_agent_seen()
+    waiting = BuildRequest.objects.filter(status=BuildRequest.REQUESTED).order_by("id").first()
+    if waiting is None:
+        return JsonResponse({"request": None})
+    waiting.status, waiting.started_at = BuildRequest.BUILDING, datetime.now(timezone.utc)
+    waiting.save()
+    return JsonResponse({"request": {"id": waiting.id}})
+
+
+@api_view(["POST"])
+def agent_report(request, request_id):
+    """The release agent reports progress (`line`) and, when done, the outcome (`status` done or failed)."""
+    if not _has_publish_key(request):
+        raise ApiError("Not allowed.", status=401, code="unauthorized")
+    builder.mark_agent_seen()
+    row = BuildRequest.objects.filter(id=int(request_id)).first() if request_id.isdigit() else None
+    if row is None:
+        raise ApiError("No such build.", status=404, code="not_found")
+    data = parse_json(request)
+    line = data.get("line")
+    if isinstance(line, str) and line.strip():
+        row.last_line = line.strip()[:300]
+    outcome = data.get("status")
+    if outcome in (BuildRequest.DONE, BuildRequest.FAILED) and row.status == BuildRequest.BUILDING:
+        row.status, row.finished_at = outcome, datetime.now(timezone.utc)
+        message = data.get("message")
+        row.message = message.strip()[:600] if isinstance(message, str) else ""
+        version = data.get("version")
+        row.version = version[:20] if isinstance(version, str) else ""
+        if outcome == BuildRequest.DONE:
+            latest = services.latest_published()
+            row.version = row.version or (latest.version if latest else "")
+            row.message = row.message or f"Version {row.version} is published. Installed apps will offer it when they refresh."
+    row.save()
+    return JsonResponse({"ok": True})

@@ -4,6 +4,10 @@ On GitHub (a host with no Rust, such as Render): GREENDOC_GITHUB_TOKEN and GREEN
 button starts the repository's "desktop-release" workflow; GitHub's free Windows machine builds and signs the
 installer and uploads it to this server with GREENDOC_PUBLISH_KEY. This module starts it and reports how it goes.
 
+On a build computer (a host with no Rust and no GitHub): the "release agent" running there (scripts/release-agent.mjs
+in the app's repository) asks this server every few seconds whether a build was requested. The button stores the
+request; the agent builds on its own computer, with its own signing key, and uploads with GREENDOC_PUBLISH_KEY.
+
 On this computer: the server has the app's source code (GREENDOC_APP_SOURCE, by default the greenleaf-word-studio
 folder next to this project), Node, Rust and the signing key. The build raises the version number, signs the
 installer, and this module publishes it exactly as an upload would.
@@ -28,7 +32,7 @@ from django.db import connection
 from core.http import ApiError
 
 from . import services
-from .models import DesktopRelease
+from .models import BuildRequest, DesktopRelease
 
 PLATFORM_DIR = "src-tauri/target/release/bundle/nsis"
 BUILD_TIMEOUT = 45 * 60
@@ -46,15 +50,76 @@ def github_configured():
     return bool(getattr(settings, "GITHUB_TOKEN", "") and getattr(settings, "GITHUB_REPO", ""))
 
 
+AGENT_SEEN_KEY = "desktop-agent-seen"
+AGENT_ONLINE_SECONDS = 90
+STUCK_AFTER = 30 * 60
+
+
+def agent_enabled():
+    """A release agent can be used when the shared publish key is set (it is how the agent proves itself)."""
+    return len(getattr(settings, "DESKTOP_PUBLISH_KEY", "")) >= 24
+
+
+def local_possible():
+    source = source_dir()
+    return source is not None and (source / "src-tauri" / "tauri.conf.json").is_file() and bool(shutil.which("npm"))
+
+
+def agent_mode():
+    return not github_configured() and not local_possible() and agent_enabled()
+
+
+def mark_agent_seen():
+    from django.core.cache import cache
+
+    cache.set(AGENT_SEEN_KEY, time.time(), timeout=600)
+
+
+def agent_online():
+    from django.core.cache import cache
+
+    seen = cache.get(AGENT_SEEN_KEY)
+    return bool(seen) and time.time() - seen < AGENT_ONLINE_SECONDS
+
+
+def _agent_status():
+    base = {"available": True, "reason": "", "version": "", "message": "", "elapsedSeconds": 0, "lastLine": ""}
+    request = BuildRequest.objects.first()
+    if request is None:
+        return {**base, "status": "idle"}
+    now = datetime.now(timezone.utc)
+    if request.status in (BuildRequest.REQUESTED, BuildRequest.BUILDING):
+        if (now - request.updated_at).total_seconds() > STUCK_AFTER:
+            request.status, request.finished_at = BuildRequest.FAILED, now
+            request.message = "The build computer stopped answering. Check that it is on and the release agent is running."
+            request.save()
+        else:
+            begun = request.started_at or request.created_at
+            if request.status == BuildRequest.REQUESTED:
+                line = (
+                    "Waiting for the build computer to pick it up…"
+                    if agent_online()
+                    else "The build computer is off or its release agent is not running. The build starts as soon as it is."
+                )
+            else:
+                line = request.last_line or "Building and signing the installer…"
+            return {**base, "status": "building", "elapsedSeconds": int((now - begun).total_seconds()), "lastLine": line}
+    started = request.started_at or request.created_at
+    took = int(((request.finished_at or now) - started).total_seconds())
+    if request.status == BuildRequest.DONE:
+        return {**base, "status": "done", "version": request.version, "elapsedSeconds": took, "message": request.message}
+    return {**base, "status": "failed", "elapsedSeconds": took, "message": request.message}
+
+
 def unavailable_reason():
     """Why this server cannot build, or "" when it can."""
-    if github_configured():
+    if github_configured() or agent_enabled():
         return ""
     source = source_dir()
     if source is None or not (source / "src-tauri" / "tauri.conf.json").is_file():
         return (
-            "This server cannot build the installer: it has neither the app's source code nor a GitHub connection "
-            "(GREENDOC_GITHUB_TOKEN and GREENDOC_GITHUB_REPO)."
+            "This server cannot build the installer: it has no app source code, no GitHub connection and no release "
+            "agent key (GREENDOC_PUBLISH_KEY)."
         )
     if not shutil.which("npm"):
         return "Node.js (npm) is not installed on this server, so it cannot build the installer."
@@ -145,6 +210,8 @@ def _github_status():
 def status():
     if github_configured():
         return _github_status()
+    if agent_mode():
+        return _agent_status()
     reason = unavailable_reason()
     with _lock:
         running = _state["status"] == "building"
@@ -165,6 +232,10 @@ def start(email, background=True):
     reason = unavailable_reason()
     if reason:
         raise ApiError(reason, status=409, code="cannot_build")
+    if agent_mode():
+        if _agent_status()["status"] != "building":
+            BuildRequest.objects.create(requested_by=email)
+        return
     if github_configured():
         if status()["status"] == "building":
             return

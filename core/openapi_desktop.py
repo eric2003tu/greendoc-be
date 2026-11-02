@@ -30,6 +30,9 @@ def build_schemas():
                 "lastLine": {**STR, "description": "The newest line of the build's output."},
             }
         ),
+        "DesktopAgentReport": s_obj(
+            {"line": STR, "status": {**STR, "enum": ["done", "failed"]}, "message": STR, "version": STR}
+        ),
         "DesktopLatest": s_obj(
             {"available": BOOL, "version": STR, "size": INT, "notes": STR},
             description="`available` is false until a version is published.",
@@ -89,6 +92,21 @@ def build_paths():
                        "number, signs it and publishes it. Takes several minutes: poll GET for progress. Nothing is "
                        "uploaded or typed. Does nothing if a build is already running.",
                        ok="DesktopBuild", ok_code="202", ok_description="The build has started.", errors=("409",)),
+        },
+        "/api/desktop/agent/next/": {
+            "get": op("Desktop app", "Release agent: is a build wanted?", "getAgentNextBuild",
+                      "For the release agent on the build computer. Send the shared key in the `X-Publish-Key` header. "
+                      "Answers `{request: {id}}` when an administrator pressed Publish update, otherwise "
+                      "`{request: null}`. Also records that the agent is online.",
+                      secured=False),
+        },
+        "/api/desktop/agent/{request_id}/": {
+            "parameters": [path_param("request_id", "The build's id from the agent's poll.")],
+            "post": op("Desktop app", "Release agent: report progress or the outcome", "reportAgentBuild",
+                       "For the release agent. `X-Publish-Key` header. Body: `line` (latest output), and when finished "
+                       "`status` (`done` or `failed`), `message` and `version`.",
+                       secured=False, errors=("404",),
+                       body="DesktopAgentReport", ok_description="Recorded."),
         },
         "/api/desktop/releases/{version}/": {
             "parameters": [path_param("version", "A published version such as 0.2.0.")],
