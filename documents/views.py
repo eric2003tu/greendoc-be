@@ -1,5 +1,6 @@
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
+from django.utils.dateparse import parse_datetime
 
 from core.http import ApiError, api_view, client_id, parse_json
 
@@ -58,6 +59,30 @@ def document_detail(request, doc_id):
         existing = Document.objects.filter(pk=doc_id).first()
         if existing and existing.client_id != owner:
             raise ApiError("Document not found.", status=404, code="not_found")
+        # Optional optimistic concurrency: a client that edited offline says which version it started from.
+        # If the document changed somewhere else since, refuse (409) instead of overwriting that work.
+        base = data.get("baseUpdatedAt")
+        if existing is not None and base is not None:
+            base_time = parse_datetime(base) if isinstance(base, str) else None
+            if base_time is None:
+                raise ApiError(
+                    "baseUpdatedAt must be the updatedAt value you last received.", code="invalid_field"
+                )
+            if base_time != existing.updated_at:
+                return JsonResponse(
+                    {
+                        "error": {
+                            "code": "edit_conflict",
+                            "message": "This document was changed somewhere else since you last synced it.",
+                            "current": {
+                                "id": str(existing.pk),
+                                "title": existing.title,
+                                "updatedAt": existing.updated_at.isoformat(),
+                            },
+                        }
+                    },
+                    status=409,
+                )
         created = existing is None
         if created:
             _check_quota(owner)

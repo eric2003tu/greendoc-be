@@ -458,6 +458,8 @@ def extend(spec):
         "properties": ref("Properties"),
         "protected": {"type": "boolean", "description": "Review > Restrict Editing. While true, html changes are rejected (403)."},
         "markedFinal": {"type": "boolean", "description": "File > Info > Mark as Final."},
+        "baseUpdatedAt": {"type": "string", "format": "date-time",
+                          "description": "Update only: the updatedAt you last received for this document. If it has changed since (edited on another device), the save is refused with 409 edit_conflict instead of overwriting it. Omit to overwrite."},
     }
     schemas["DocumentInput"]["properties"].update(extra_input)
     schemas["DocumentSummary"]["properties"].update(
@@ -466,6 +468,11 @@ def extend(spec):
     schemas["Document"]["allOf"][1]["properties"].update(settings=ref("Settings"), properties=ref("Properties"))
     schemas["SharedDocument"]["properties"]["settings"] = ref("Settings")
 
+    put = spec["paths"]["/api/documents/{doc_id}/"].get("put")
+    if put is not None:
+        put["responses"]["409"] = _error(
+            "edit_conflict: the document changed since `baseUpdatedAt`. The body has error.current with the newer title and updatedAt."
+        )
     spec["tags"].extend(
         [
             {"name": "Document tools", "description": "Stats, table of contents, find & replace, proofing and export for a saved document."},
