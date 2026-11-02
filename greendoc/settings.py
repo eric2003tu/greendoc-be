@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     'workspace',
     'accounts',
     'support',
+    'learning',
 ]
 
 MIDDLEWARE = [
@@ -162,3 +163,8 @@ FRONTEND_URL = os.environ.get('GREENDOC_FRONTEND_URL', 'http://localhost:8080').
 # purpose, so it cannot be deleted and its password and email cannot be changed.
 DEMO_EMAIL = os.environ.get('GREENDOC_DEMO_EMAIL', 'demo@greendoc.app')
 DEMO_PASSWORD = os.environ.get('GREENDOC_DEMO_PASSWORD', 'GreenDoc-demo-2026')
+
+
+# Learning: a word, name, correction or phrase joins the shared model only when this many
+# different people (who opted in) contributed it.
+LEARNING_MIN_CONTRIBUTORS = int(os.environ.get('GREENDOC_LEARNING_MIN_CONTRIBUTORS', '3'))

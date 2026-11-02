@@ -44,35 +44,38 @@ class PreferencesTests(Base):
         self.assertEqual(self.client.get("/api/preferences/").status_code, 400)
 
 
+KHAN = {"tag": "Khan21", "type": "Book", "author": "Khan, R.", "title": "Writing well", "year": "2021", "publisher": "Green Press"}
+DOE = {"tag": "Doe24", "type": "Journal Article", "author": "Doe, J.", "title": "On document automation", "year": "2024", "publisher": "Journal of Productivity"}
+
+
 class SourceTests(Base):
-    def test_defaults_seeded_once(self):
-        tags = [s["tag"] for s in self.send("get", "/api/sources/").json()["sources"]]
-        self.assertEqual(tags, ["Doe24", "Smith19", "Lee22"])
-        for tag in tags:
-            self.send("delete", f"/api/sources/{tag}/")
-        self.assertEqual(self.send("get", "/api/sources/").json()["sources"], [])  # not re-seeded
+    def test_library_starts_empty_with_no_sample_data(self):
+        self.assertEqual(self.send("get", "/api/sources/").json()["sources"], [])
+        self.assertEqual(self.send("get", "/api/bibliography/").json()["count"], 0)
 
     def test_crud(self):
-        body = {"tag": "Khan21", "type": "Book", "author": "Khan, R.", "title": "Writing well", "year": "2021", "publisher": "Green Press"}
-        self.assertEqual(self.send("post", "/api/sources/", body).status_code, 201)
-        self.assertEqual(self.send("post", "/api/sources/", body).status_code, 409)
+        self.assertEqual(self.send("post", "/api/sources/", KHAN).status_code, 201)
+        self.assertEqual(self.send("post", "/api/sources/", KHAN).status_code, 409)
         self.assertEqual(self.send("get", "/api/sources/Khan21/").json()["title"], "Writing well")
         r = self.send("put", "/api/sources/Khan21/", {"year": "2022"}).json()
         self.assertEqual((r["year"], r["author"]), ("2022", "Khan, R."))
+        self.send("post", "/api/sources/", DOE)
         self.assertEqual(self.send("put", "/api/sources/Khan21/", {"tag": "Doe24"}).status_code, 409)
         self.assertEqual(self.send("put", "/api/sources/Khan21/", {"tag": "Khan22"}).json()["tag"], "Khan22")
         self.assertEqual(self.send("delete", "/api/sources/Khan22/").status_code, 204)
         self.assertEqual(self.send("get", "/api/sources/Khan22/").status_code, 404)
+        self.assertEqual([s["tag"] for s in self.send("get", "/api/sources/").json()["sources"]], ["Doe24"])
 
     def test_validation_and_privacy(self):
         self.assertEqual(self.send("post", "/api/sources/", {"tag": "x"}).status_code, 400)
         self.assertEqual(self.send("post", "/api/sources/", {"tag": "", "author": "a", "title": "t"}).status_code, 400)
         self.assertEqual(self.send("post", "/api/sources/", {"tag": "t", "author": "a", "title": "t", "x": 1}).status_code, 400)
         self.send("post", "/api/sources/", {"tag": "Mine", "author": "Me, M.", "title": "T"})
-        tags_b = [s["tag"] for s in self.send("get", "/api/sources/", client=B).json()["sources"]]
-        self.assertNotIn("Mine", tags_b)
+        self.assertEqual(self.send("get", "/api/sources/", client=B).json()["sources"], [])
 
     def test_citations_and_bibliography(self):
+        for source in (DOE, {**KHAN, "tag": "Smith19", "author": "Smith, A."}, {"tag": "Lee22", "author": "Lee, K.", "title": "Usability of ribbon interfaces", "year": "2022", "publisher": "Greenleaf Labs"}):
+            self.send("post", "/api/sources/", source)
         r = self.send("post", "/api/citations/format/", {"tag": "Doe24", "style": "APA"}).json()
         self.assertEqual(r["text"], "(Doe, 2024)")
         self.assertIn('class="w-citation" data-tag="Doe24"', r["html"])
@@ -101,6 +104,8 @@ class CatalogTests(Base):
         ids = [t["id"] for t in self.client.get("/api/catalog/templates/?category=Business").json()["templates"]]
         self.assertTrue(ids and all(i not in ("blank",) for i in ids))
         self.assertEqual([t["id"] for t in self.client.get("/api/catalog/templates/?q=memo").json()["templates"]], ["memo"])
+        with_html = self.client.get("/api/catalog/templates/?html=1").json()["templates"]
+        self.assertTrue(all(t["html"] for t in with_html))
         one = self.client.get("/api/catalog/templates/resume/").json()
         self.assertIn("<h1>", one["html"])
         self.assertEqual(self.client.get("/api/catalog/templates/nope/").status_code, 404)

@@ -8,7 +8,9 @@ from django.db import transaction
 
 from core.http import ApiError
 from documents.models import Document
-from workspace.models import Preferences, Source, SourcesSeeded
+from learning.models import LearningProfile
+from learning.services import claim_guest_profile
+from workspace.models import Preferences, Source
 
 from .models import Profile
 
@@ -72,6 +74,7 @@ def user_json(user):
         "initials": initials(user),
         "createdAt": user.date_joined.isoformat(),
         "documentCount": Document.objects.filter(client_id=user.profile.owner_id).count(),
+        "isAdmin": bool(user.is_staff),
     }
 
 
@@ -101,10 +104,6 @@ def claim_guest_data(guest_id, owner_id):
             source.client_id = owner_id
             source.save(update_fields=["client_id"])
             moved += 1
-    if SourcesSeeded.objects.filter(client_id=guest_id).exists():
-        SourcesSeeded.objects.get_or_create(client_id=owner_id)
-        SourcesSeeded.objects.filter(client_id=guest_id).delete()
-
     pref_moved = False
     guest_pref = Preferences.objects.filter(client_id=guest_id).first()
     if guest_pref:
@@ -117,6 +116,7 @@ def claim_guest_data(guest_id, owner_id):
             mine.data = {**guest_pref.data, **mine.data}
             mine.save()
             guest_pref.delete()
+    claim_guest_profile(guest_id, owner_id)
     return {"documents": documents, "sources": moved, "preferences": pref_moved}
 
 
@@ -125,6 +125,6 @@ def delete_account(user):
     owner = user.profile.owner_id
     Document.objects.filter(client_id=owner).delete()  # cascades comments, versions, merge data
     Source.objects.filter(client_id=owner).delete()
-    SourcesSeeded.objects.filter(client_id=owner).delete()
     Preferences.objects.filter(client_id=owner).delete()
+    LearningProfile.objects.filter(client_id=owner).delete()
     user.delete()

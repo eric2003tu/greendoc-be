@@ -9,8 +9,9 @@ from . import data
 def template_list(request):
     category = request.GET.get("category", "").strip()
     query = request.GET.get("q", "").strip().lower()
+    keys = ("id", "name", "desc", "category") + (("html",) if request.GET.get("html") == "1" else ())
     items = [
-        {k: t[k] for k in ("id", "name", "desc", "category")}
+        {k: t[k] for k in keys}
         for t in data.templates()
         if (not category or category == "All" or t["category"] == category)
         and (not query or query in t["name"].lower() or query in t["desc"].lower())

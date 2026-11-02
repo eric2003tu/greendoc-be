@@ -5,7 +5,7 @@ from core import validate as v
 from core.http import ApiError, api_view, client_id, parse_json
 from documents import services
 
-from .models import Preferences, Source, SourcesSeeded
+from .models import Preferences, Source
 
 PREFERENCE_SPEC = {
     "dark": v.boolean(),
@@ -78,12 +78,6 @@ def _source(s):
 
 
 def _library(owner):
-    """The client's sources; the three defaults are copied in on first use."""
-    if not SourcesSeeded.objects.filter(client_id=owner).exists():
-        Source.objects.bulk_create(
-            [Source(client_id=owner, **s) for s in catalog.DEFAULT_SOURCES], ignore_conflicts=True
-        )
-        SourcesSeeded.objects.get_or_create(client_id=owner)
     return Source.objects.filter(client_id=owner)
 
 

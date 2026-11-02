@@ -272,7 +272,8 @@ def build_paths():
             "get": op("Catalog", "List templates", "listTemplates",
                       "The 17 start-screen templates (without bodies).", secured=False, ok="TemplateList",
                       params=[query("category", "General, Personal, Business, Academic, Creative or All."),
-                              query("q", "Search name and description.")]),
+                              query("q", "Search name and description."),
+                              query("html", "Pass 1 to include each template body (for thumbnails).", {"type": "string", "enum": ["1"]})]),
         },
         "/api/catalog/templates/{template_id}/": {
             "get": op("Catalog", "Get a template", "getTemplate",
@@ -302,7 +303,7 @@ def build_paths():
         },
         "/api/sources/": {
             "get": op("References", "List sources", "listSources",
-                      "Your bibliography library. Three sample sources are added the first time it is read.",
+                      "Your bibliography library. It starts empty; add sources with POST.",
                       ok="SourceList", errors=("400",)),
             "post": op("References", "Add a source", "addSource", body="Source", ok="Source",
                        ok_code="201", ok_description="Created.", errors=("400", "409"),

@@ -65,6 +65,14 @@ def require_user(request):
     return user
 
 
+def require_admin(request):
+    """The signed-in administrator. Everyone else is refused (guests with 401, others with 403)."""
+    user = require_user(request)
+    if not (user.is_staff and user.is_active):
+        raise ApiError("This is only available to administrators.", status=403, code="admin_only")
+    return user
+
+
 def client_id(request):
     """Owner identity for stored data. Signed in: the account's owner id, the same on every
     device. Guest: the random UUID the browser generated (X-Client-Id)."""

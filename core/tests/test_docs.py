@@ -2,7 +2,7 @@ import json
 import re
 
 from django.core.cache import cache
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import get_resolver
 
 from core.openapi import build_spec
@@ -41,6 +41,7 @@ def _refs(node):
             yield from _refs(item)
 
 
+@override_settings(RATE_LIMIT_PER_MINUTE=0)  # this test visits every route; it checks routing, not the limiter
 class OpenApiDocsTests(TestCase):
     def setUp(self):
         cache.clear()
@@ -68,7 +69,7 @@ class OpenApiDocsTests(TestCase):
         for path, item in self.spec["paths"].items():
             url = re.sub(
                 r"\{(\w+)\}",
-                lambda m: "00000000-0000-0000-0000-000000000000" if m.group(1) in ("doc_id", "version_id") else "x",
+                lambda m: "00000000-0000-0000-0000-000000000000" if m.group(1) in ("doc_id", "version_id", "session_id") else "x",
                 path,
             )
             for method in item:

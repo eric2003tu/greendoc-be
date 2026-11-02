@@ -1,7 +1,7 @@
 """OpenAPI descriptions for accounts, sharing/collaboration and support."""
 
 from .openapi import COMMON_ERRORS, _error, _json
-from .openapi_extra import BOOL, DATE, INT, STR, STRS, UUID_PARAM_DOC, ref, s_obj
+from .openapi_extra import BOOL, DATE, INT, STR, STRS, UUID_PARAM_DOC, path_param, ref, s_obj
 
 BEARER = [{"BearerAuth": []}]
 ERR = {
@@ -59,6 +59,24 @@ def build_paths():
                        "`demo@greendoc.app` / `GreenDoc-demo-2026` (run `python manage.py seed_demo` first)." + guest_note,
                        body="LoginInput", ok="AuthResult", errors=("400", "401", "429"),
                        body_example={"email": "amina@example.com", "password": "a-long-passphrase"}),
+        },
+        "/api/auth/refresh/": {
+            "post": op("Account", "Renew the session token", "refreshSession",
+                       "Swaps the current token for a new one (the old one stops working). The app does this "
+                       "automatically about once a week while signed in. Sessions last 30 days from last use, "
+                       "and at most 90 days in total before the person must sign in again.",
+                       auth=BEARER, ok="AuthResult", errors=("401",)),
+        },
+        "/api/auth/sessions/": {
+            "get": op("Account", "Where am I signed in?", "listSessions",
+                      "Every device with an active session, newest first. The one making this request has `current: true`.",
+                      auth=BEARER, ok="SessionList", errors=("401",)),
+        },
+        "/api/auth/sessions/{session_id}/": {
+            "parameters": [path_param("session_id", "Session id from the sessions list.", "uuid")],
+            "delete": op("Account", "Sign out one device", "revokeSession",
+                         "Ends that session immediately. Passing the current session's id signs this device out.",
+                         auth=BEARER, ok_code="204", ok_description="Session ended.", errors=("401", "404")),
         },
         "/api/auth/logout/": {
             "post": op("Account", "Sign out", "logout", "Ends this device's session.", auth=BEARER,
@@ -137,13 +155,18 @@ def build_schemas():
             required=["email", "password"]),
         "User": s_obj({"id": STR, "email": {"type": "string", "format": "email"}, "firstName": STR, "lastName": STR,
                        "displayName": {**STR, "example": "Amina Ndlovu"}, "initials": {**STR, "example": "AN"},
-                       "createdAt": DATE, "documentCount": INT}),
+                       "createdAt": DATE, "documentCount": INT,
+                        "isAdmin": {**BOOL, "description": "True for administrators, who can see how the learning engine is being trained."}}),
         "AuthResult": s_obj(
-            {"token": {**STR, "description": "Send as `Authorization: Bearer <token>`. Valid for 30 days; shown only once."},
+            {"token": {**STR, "description": "Send as `Authorization: Bearer <token>`. Shown only once."},
+             "expiresAt": {**DATE, "description": "When the session ends if it is not used again (30 days from last use, 90 days at most)."},
              "user": ref("User"),
              "claimed": s_obj({"documents": INT, "sources": INT, "preferences": BOOL},
                               description="What moved from the guest session into the account (present when a guest id was sent).")},
             required=["token", "user"]),
+        "Session": s_obj({"id": {**STR, "format": "uuid"}, "device": {**STR, "example": "Chrome on Windows"},
+                          "createdAt": DATE, "lastUsedAt": DATE, "expiresAt": DATE, "current": BOOL}),
+        "SessionList": s_obj({"sessions": {"type": "array", "items": ref("Session")}}),
         "ProfileUpdate": s_obj({"firstName": {"type": "string", "maxLength": 50}, "lastName": {"type": "string", "maxLength": 50},
                                 "email": {"type": "string", "format": "email"},
                                 "currentPassword": {"type": "string", "format": "password", "description": "Required when changing the email."}}),

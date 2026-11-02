@@ -26,10 +26,3 @@ class Source(models.Model):
         constraints = [
             models.UniqueConstraint(fields=["client_id", "tag"], name="unique_source_tag_per_client")
         ]
-
-
-class SourcesSeeded(models.Model):
-    """Marks that the default sources were copied into a browser's library, so
-    deleting them all does not bring the defaults back."""
-
-    client_id = models.UUIDField(unique=True)

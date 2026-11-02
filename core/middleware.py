@@ -4,7 +4,7 @@ from django.conf import settings
 from django.core.cache import cache
 from django.http import HttpResponse, JsonResponse
 
-ALLOWED_HEADERS = "Content-Type, X-Client-Id"
+ALLOWED_HEADERS = "Content-Type, X-Client-Id, Authorization"
 ALLOWED_METHODS = "GET, POST, PUT, DELETE, OPTIONS"
 
 

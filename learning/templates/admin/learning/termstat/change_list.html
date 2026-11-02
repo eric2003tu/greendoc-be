@@ -1,0 +1,112 @@
+{% extends "admin/change_list.html" %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+  .engine { margin: 0 0 24px; }
+  .engine h2 { margin: 0 0 8px; font-size: 16px; }
+  .engine .cards { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+  .engine .card { min-width: 150px; padding: 12px 16px; border: 1px solid var(--border-color, #ddd); border-radius: 6px; background: var(--body-bg, #fff); }
+  .engine .card b { display: block; font-size: 26px; line-height: 1.2; color: #107c41; }
+  .engine .card span { color: var(--body-quiet-color, #666); font-size: 12px; }
+  .engine .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px; }
+  .engine table { width: 100%; }
+  .engine .bars { display: flex; align-items: flex-end; gap: 3px; height: 110px; padding: 4px 0; border-bottom: 1px solid var(--border-color, #ddd); }
+  .engine .bars i { flex: 1; min-height: 2px; background: #107c41; border-radius: 2px 2px 0 0; }
+  .engine .bars i.empty { background: var(--border-color, #ddd); }
+  .engine .axis { display: flex; justify-content: space-between; color: var(--body-quiet-color, #666); font-size: 11px; }
+  .engine .note { color: var(--body-quiet-color, #666); font-size: 12px; margin-top: 6px; }
+  .engine .pill { display: inline-block; padding: 1px 8px; border-radius: 10px; background: #dff6dd; color: #0a4d29; font-size: 11px; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% if engine %}
+<div class="engine">
+  <h2>Training engine</h2>
+  <div class="cards">
+    <div class="card"><b>{{ engine.terms }}</b><span>terms learned from everyone</span></div>
+    <div class="card"><b>{{ engine.published }}</b><span>in the shared dictionary (used by {{ engine.threshold }}+ people)</span></div>
+    <div class="card"><b>{{ engine.opted_in }}</b><span>people sharing (of {{ engine.profiles }} backed up)</span></div>
+    <div class="card"><b>{{ engine.new_this_week }}</b><span>new terms in the last 7 days</span></div>
+    <div class="card"><b>{{ engine.uploads_this_week }}</b><span>uploads in the last 7 days</span></div>
+    <div class="card"><b>{{ engine.published_today }}</b><span>words updated today</span></div>
+  </div>
+
+  <div class="grid">
+    <div>
+      <h2>New terms per day (last 30 days)</h2>
+      <div class="bars">
+        {% for d in engine.series %}
+          <i class="{% if not d.new_terms %}empty{% endif %}" style="height: {{ d.bar }}%" title="{{ d.day|date:'j M' }}: {{ d.new_terms }} new, {{ d.uploads }} uploads, {{ d.total }} in total"></i>
+        {% endfor %}
+      </div>
+      <div class="axis"><span>{{ engine.series.0.day|date:"j M" }}</span><span>today</span></div>
+      <p class="note">Total grows from {{ engine.series.0.total }} to {{ engine.terms }} over this period. Hover a bar for that day.</p>
+    </div>
+
+    <div>
+      <h2>By kind</h2>
+      <table>
+        <thead><tr><th>Kind</th><th>Total</th><th>Published</th><th>Waiting</th><th>Uses</th></tr></thead>
+        <tbody>
+        {% for k in engine.kinds %}
+          <tr><td>{{ k.label }}</td><td>{{ k.total }}</td><td>{{ k.published }}</td><td>{{ k.pending }}</td><td>{{ k.uses }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      <p class="note">Published terms reach every user. A term waits until {{ engine.threshold }} different people have used it, so one person's private word never becomes public.</p>
+    </div>
+
+    <div>
+      <h2>Most agreed-on words</h2>
+      <table>
+        <thead><tr><th>Word</th><th>People</th><th>Uses</th></tr></thead>
+        <tbody>
+        {% for t in engine.top_words %}
+          <tr><td><a href="{% url 'admin:learning_termstat_change' t.pk %}">{{ t.key }}</a></td><td>{{ t.contributors }}</td><td>{{ t.count }}</td></tr>
+        {% empty %}
+          <tr><td colspan="3">Nothing published yet.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div>
+      <h2>One person away from publishing</h2>
+      <table>
+        <thead><tr><th>Word</th><th>Uses</th></tr></thead>
+        <tbody>
+        {% for t in engine.almost %}
+          <tr><td><a href="{% url 'admin:learning_termstat_change' t.pk %}">{{ t.key }}</a></td><td>{{ t.count }}</td></tr>
+        {% empty %}
+          <tr><td colspan="2">None right now.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div>
+      <h2>Newest terms</h2>
+      <table>
+        <thead><tr><th>Term</th><th>Kind</th><th>People</th><th>Added</th></tr></thead>
+        <tbody>
+        {% for t in engine.recent %}
+          <tr>
+            <td><a href="{% url 'admin:learning_termstat_change' t.pk %}">{{ t.key }}</a></td>
+            <td>{{ t.get_kind_display }}</td>
+            <td>{{ t.contributors }}</td>
+            <td>{{ t.created_at|date:"j M, H:i" }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="4">No terms yet.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <p class="note">The engine stores no user identity: there is nothing here about who taught a term. To remove a word that should not be shared, tick it below and choose "Delete selected".</p>
+</div>
+{% endif %}
+{{ block.super }}
+{% endblock %}

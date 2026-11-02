@@ -51,8 +51,8 @@ def _session(request, user, data):
     guest = _guest_id(request)
     if guest and data.get("claimGuestData", True) is not False:
         claimed = services.claim_guest_data(guest, user.profile.owner_id)
-    token = tokens.issue_token(user, request.headers.get("User-Agent", ""))
-    body = {"token": token, "user": services.user_json(user)}
+    token, row = tokens.issue_token(user, tokens.describe_device(request.headers.get("User-Agent", "")))
+    body = {"token": token, "expiresAt": row.expires_at.isoformat(), "user": services.user_json(user)}
     if claimed is not None:
         body["claimed"] = claimed
     return body
@@ -170,7 +170,7 @@ def change_password(request):
     new = services.clean_password(data.get("newPassword"), user, field="newPassword")
     user.set_password(new)
     user.save()
-    keep = tokens._hash(bearer_token(request))
+    keep = tokens.hash_token(bearer_token(request))
     AuthToken.objects.filter(user=user).exclude(token_hash=keep).delete()  # sign out other devices
     return JsonResponse({"message": "Password changed. Other devices have been signed out."})
 
@@ -216,3 +216,46 @@ def reset_password(request):
     user.save()
     tokens.revoke_all(user)
     return JsonResponse({"message": "Password updated. You can sign in now."})
+
+
+@api_view(["POST"])
+def refresh(request):
+    """Swap the current token for a fresh one. The app calls this regularly while signed in,
+    so a token that leaked long ago stops working and the session keeps going."""
+    require_user(request)
+    result = tokens.rotate(bearer_token(request))
+    if result is None:
+        raise ApiError("Your session has expired. Please sign in again.", status=401, code="invalid_token")
+    token, row = result
+    return JsonResponse(
+        {"token": token, "expiresAt": row.expires_at.isoformat(), "user": services.user_json(row.user)}
+    )
+
+
+def _session_json(row, current_hash):
+    return {
+        "id": str(row.public_id),
+        "device": row.device or "Unknown device",
+        "createdAt": row.created_at.isoformat(),
+        "lastUsedAt": row.last_used_at.isoformat(),
+        "expiresAt": row.expires_at.isoformat(),
+        "current": row.token_hash == current_hash,
+    }
+
+
+@api_view(["GET"])
+def sessions(request):
+    """Where you are signed in. The current device is flagged."""
+    user = require_user(request)
+    current = tokens.hash_token(bearer_token(request))
+    return JsonResponse({"sessions": [_session_json(r, current) for r in AuthToken.objects.filter(user=user)]})
+
+
+@api_view(["DELETE"])
+def session_detail(request, session_id):
+    """Sign out one device (including this one)."""
+    user = require_user(request)
+    deleted, _ = AuthToken.objects.filter(user=user, public_id=session_id).delete()
+    if not deleted:
+        raise ApiError("Session not found.", status=404, code="not_found")
+    return HttpResponse(status=204)

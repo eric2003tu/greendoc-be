@@ -139,6 +139,9 @@ class PlatformTests(TestCase):
         )
         self.assertEqual(r.status_code, 204)
         self.assertIn("X-Client-Id", r["Access-Control-Allow-Headers"])
+        # A signed-in browser sends its session token in Authorization; without this the browser
+        # blocks every request after sign-in (it looks like "can't reach the server").
+        self.assertIn("Authorization", r["Access-Control-Allow-Headers"])
 
     @override_settings(CORS_ALLOWED_ORIGINS=["https://app.example"])
     def test_cors_allowlist(self):

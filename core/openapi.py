@@ -489,6 +489,6 @@ def _base_spec(server_url):
 
 def build_spec(server_url="/"):
     # Imported here: these modules reuse helpers defined above.
-    from . import openapi_accounts, openapi_extra
+    from . import openapi_accounts, openapi_extra, openapi_learning
 
-    return openapi_accounts.extend(openapi_extra.extend(_base_spec(server_url)))
+    return openapi_learning.extend(openapi_accounts.extend(openapi_extra.extend(_base_spec(server_url))))

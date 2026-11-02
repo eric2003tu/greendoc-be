@@ -259,7 +259,7 @@ class GuestDataTests(Base):
         self.assertEqual(r.status_code, 201)
         claimed = r.json()["claimed"]
         self.assertEqual((claimed["documents"], claimed["preferences"]), (1, True))
-        self.assertGreaterEqual(claimed["sources"], 4)
+        self.assertEqual(claimed["sources"], 1)
         token = r.json()["token"]
         # the account sees it with no guest header, i.e. from any device
         docs = self.call("get", "/api/documents/", token=token).json()["documents"]
@@ -283,15 +283,18 @@ class GuestDataTests(Base):
         self.call("put", "/api/preferences/", {"dark": False, "zoom": 120}, token=token)
         self.call("post", "/api/documents/", {"title": "Guest doc"}, guest=GUEST)
         self.call("put", "/api/preferences/", {"dark": True, "showGrid": True}, guest=GUEST)
-        self.call("get", "/api/sources/", guest=GUEST)  # seeds the sample sources for the guest too
+        self.call("post", "/api/sources/", {"tag": "G1", "author": "Guest, A.", "title": "T"}, guest=GUEST)
+        self.call("post", "/api/sources/", {"tag": "Both", "author": "Guest, B.", "title": "From guest"}, guest=GUEST)
+        self.call("post", "/api/sources/", {"tag": "Both", "author": "Acct, B.", "title": "From account"}, token=token)
         r = self.call("post", "/api/auth/login/", {"email": "amina@example.com", "password": PASSWORD}, guest=GUEST).json()
         self.assertEqual(r["claimed"]["documents"], 1)
         titles = sorted(d["title"] for d in self.call("get", "/api/documents/", token=r["token"]).json()["documents"])
         self.assertEqual(titles, ["Account doc", "Guest doc"])
         prefs = self.call("get", "/api/preferences/", token=r["token"]).json()
         self.assertEqual((prefs["dark"], prefs["zoom"], prefs["showGrid"]), (False, 120, True))  # account wins conflicts
-        tags = [s["tag"] for s in self.call("get", "/api/sources/", token=r["token"]).json()["sources"]]
-        self.assertEqual(len(tags), len(set(tags)))
+        sources = {s["tag"]: s for s in self.call("get", "/api/sources/", token=r["token"]).json()["sources"]}
+        self.assertEqual(sorted(sources), ["Both", "G1"])
+        self.assertEqual(sources["Both"]["title"], "From account")  # account wins a tag clash
 
     def test_opting_out_of_claiming(self):
         self.call("post", "/api/documents/", {"title": "Guest doc"}, guest=GUEST)

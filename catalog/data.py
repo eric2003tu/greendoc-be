@@ -65,12 +65,6 @@ SHORTCUTS = [
     ["Ctrl+Shift+8", "Show paragraph marks"],
 ]
 
-DEFAULT_SOURCES = [
-    {"tag": "Doe24", "type": "Journal Article", "author": "Doe, J.", "title": "On document automation", "year": "2024", "publisher": "Journal of Productivity"},
-    {"tag": "Smith19", "type": "Book", "author": "Smith, A.", "title": "Modern office suites", "year": "2019", "publisher": "Greenleaf Press"},
-    {"tag": "Lee22", "type": "Report", "author": "Lee, K.", "title": "Usability of ribbon interfaces", "year": "2022", "publisher": "Greenleaf Labs"},
-]
-
 
 @lru_cache(maxsize=1)
 def templates():
