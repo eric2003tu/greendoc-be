@@ -1,0 +1,36 @@
+# Render blueprint for the GreenDoc API (https://render.com). Create a "Blueprint" from this repository.
+# Free plan: the disk is wiped on every restart, so the database lives in Postgres (DATABASE_URL, e.g. Neon)
+# and installers live in an S3-compatible bucket (e.g. Cloudflare R2). See DEPLOY.md.
+services:
+  - type: web
+    name: greendoc-api
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput
+    startCommand: bash render_start.sh
+    healthCheckPath: /api/health/
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13.7
+      - key: GREENDOC_DEBUG
+        value: "0"
+      - key: GREENDOC_TRUST_PROXY
+        value: "1"
+      - key: GREENDOC_SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL          # Postgres connection string (Neon)
+        sync: false
+      - key: GREENDOC_S3_BUCKET    # installer storage (Cloudflare R2)
+        sync: false
+      - key: GREENDOC_S3_ENDPOINT  # https://<account-id>.r2.cloudflarestorage.com
+        sync: false
+      - key: GREENDOC_S3_KEY_ID
+        sync: false
+      - key: GREENDOC_S3_SECRET
+        sync: false
+      - key: GREENDOC_ADMIN_EMAIL
+        sync: false
+      - key: GREENDOC_ADMIN_PASSWORD
+        sync: false
+      - key: GREENDOC_FRONTEND_URL # the website's address, for links in emails
+        sync: false

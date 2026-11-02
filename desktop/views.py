@@ -1,4 +1,5 @@
-from django.http import FileResponse, HttpResponse, JsonResponse
+from django.core.files.storage import FileSystemStorage
+from django.http import FileResponse, HttpResponse, HttpResponseRedirect, JsonResponse
 
 from core.http import ApiError, api_view, require_admin
 
@@ -44,6 +45,10 @@ def download(request, version):
         release = DesktopRelease.objects.filter(version=version, published=True).first()
     if release is None:
         raise ApiError("There is no installer to download yet.", status=404, code="not_found")
+    if not isinstance(release.installer.storage, FileSystemStorage):
+        # Installers kept in a bucket (Render has no permanent disk): send the caller there with a short-lived
+        # signed link, so a 45 MB file never passes through this small server.
+        return HttpResponseRedirect(release.installer.url)
     return FileResponse(
         release.installer.open("rb"),
         as_attachment=True,

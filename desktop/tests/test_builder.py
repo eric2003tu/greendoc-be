@@ -117,3 +117,24 @@ class BuilderTests(TestCase):
             builder.start("boss@example.com")
         self.assertEqual(thread.call_count, 1)
         self.assertEqual(builder.status()["status"], "building")
+
+
+@override_settings(MEDIA_ROOT=MEDIA)
+class RemoteStorageTests(TestCase):
+    """With installers in a bucket, downloads redirect to a signed link instead of streaming through the server."""
+
+    def test_download_redirects_when_the_installer_is_stored_remotely(self):
+        from django.core.files.storage import Storage
+
+        release = DesktopRelease.objects.create(
+            version="0.3.0", signature=SIGNATURE, size=1_300_000, installer="installers/GreenDoc_0.3.0_x64-setup.exe"
+        )
+
+        class FakeBucket(Storage):
+            def url(self, name):
+                return f"https://bucket.example/{name}?signed=1"
+
+        with mock.patch.object(DesktopRelease._meta.get_field("installer"), "storage", FakeBucket()):
+            response = self.client.get("/api/desktop/download/0.3.0/")
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response["Location"].startswith("https://bucket.example/"))
