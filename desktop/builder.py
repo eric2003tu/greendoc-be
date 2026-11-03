@@ -1,10 +1,8 @@
 """Builds the Windows installer and publishes it: the engine page's one button. Three ways, chosen by settings.
 
-On GitHub (a host with no Rust, such as Render): the repository's hosted Windows workflow periodically asks
-this server for queued builds, using GREENDOC_PUBLISH_KEY. No GitHub API token is needed on this server.
-
-For direct GitHub dispatch, GREENDOC_GITHUB_TOKEN and GREENDOC_GITHUB_REPO may be set. The button starts the
-repository's "desktop-release" workflow; GitHub's Windows machine builds and signs the installer and uploads it.
+On GitHub (a host with no Rust, such as Render): GREENDOC_GITHUB_TOKEN and GREENDOC_GITHUB_REPO are set. The
+button starts the repository's "desktop-release" workflow; GitHub's Windows runner builds and signs the installer
+and uploads it to this server with GREENDOC_PUBLISH_KEY. This module starts it and reports progress.
 
 On a build computer (a host with no Rust and no GitHub): the "release agent" running there (scripts/release-agent.mjs
 in the app's repository) asks this server every few seconds whether a build was requested. The button stores the

@@ -35,10 +35,9 @@ its own disk: the database is a free Postgres (Neon) and the Windows installers 
 
 ## 5. Publish the Windows app online (GitHub Actions)
 
-The API cannot build Windows installers itself. A GitHub Actions workflow checks the API's release queue every
-five minutes; when it finds a request, GitHub's hosted Windows runner builds, signs and publishes the installer.
-Your computer does not need to be on, and Render does not need a GitHub API token. A request may wait up to five
-minutes for the next check. Scheduled checks use GitHub Actions minutes, especially relevant for private repositories.
+The API cannot build Windows installers itself. When an administrator presses **Publish update**, the API
+dispatches a GitHub Actions workflow. GitHub's hosted Windows runner builds, signs and publishes the installer.
+Your computer does not need to be on.
 
 One-time setup:
 
@@ -50,13 +49,16 @@ One-time setup:
    - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`: only if the signing key has a password.
 3. In **Actions > Variables**, add the repository variable `GREENDOC_SERVER` with the API's public base URL
    (for example, `https://greendoc-api.onrender.com`; no trailing slash).
-4. In the Render service's **Environment** settings, set `GREENDOC_PUBLISH_KEY` to the same shared key used in
-   the GitHub secret. No GitHub token is required on Render.
-5. Save the Render environment changes and wait for the service to redeploy with this backend code. Then an
-   administrator can press **Publish update** on `/engine`; the next hosted check claims the request and publishes it.
+4. In the Render service's **Environment** settings, set `GREENDOC_GITHUB_TOKEN` to the fine-grained token for
+   this repository with **Actions: Read and write** permission. Also set `GREENDOC_PUBLISH_KEY` to the same shared
+   key used in the GitHub secret. Set `GREENDOC_GITHUB_REPO` to `eric2003tu/greenleaf-word-studio`,
+   `GREENDOC_GITHUB_REF` to `main`, and `GREENDOC_GITHUB_WORKFLOW` to `desktop-release.yml` (the Render blueprint
+   supplies these values except the two secrets).
+5. Save the Render environment changes and wait for the service to redeploy. Then an administrator can press
+   **Publish update** on `/engine`; the API starts the hosted build immediately.
 
-The workflow can also be started manually from the repository's **Actions** tab to check the queue immediately.
-See `greenleaf-word-studio/DESKTOP.md` for details. The local release agent remains an optional alternative.
+The workflow can also be started manually from the repository's **Actions** tab. See
+`greenleaf-word-studio/DESKTOP.md` for details. The local release agent remains an optional alternative.
 
 ## Notes
 - Run **one** worker (the start script does): rate limits and sign-in lockouts are counted in memory.

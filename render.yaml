@@ -34,6 +34,15 @@ services:
         sync: false
       - key: GREENDOC_FRONTEND_URL # the website's address, for links in emails
         sync: false
-      # Shared with GitHub Actions, which polls the build queue and publishes releases.
+      # Shared with GitHub Actions, which uploads each signed release.
       - key: GREENDOC_PUBLISH_KEY
         sync: false
+      # Lets the API dispatch and monitor the hosted Windows workflow.
+      - key: GREENDOC_GITHUB_TOKEN
+        sync: false
+      - key: GREENDOC_GITHUB_REPO
+        value: eric2003tu/greenleaf-word-studio
+      - key: GREENDOC_GITHUB_REF
+        value: main
+      - key: GREENDOC_GITHUB_WORKFLOW
+        value: desktop-release.yml
