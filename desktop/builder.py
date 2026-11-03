@@ -1,8 +1,10 @@
-"""Builds the Windows installer and publishes it: the engine page's one button. Two ways, chosen by settings.
+"""Builds the Windows installer and publishes it: the engine page's one button. Three ways, chosen by settings.
 
-On GitHub (a host with no Rust, such as Render): GREENDOC_GITHUB_TOKEN and GREENDOC_GITHUB_REPO are set. The
-button starts the repository's "desktop-release" workflow; GitHub's free Windows machine builds and signs the
-installer and uploads it to this server with GREENDOC_PUBLISH_KEY. This module starts it and reports how it goes.
+On GitHub (a host with no Rust, such as Render): the repository's hosted Windows workflow periodically asks
+this server for queued builds, using GREENDOC_PUBLISH_KEY. No GitHub API token is needed on this server.
+
+For direct GitHub dispatch, GREENDOC_GITHUB_TOKEN and GREENDOC_GITHUB_REPO may be set. The button starts the
+repository's "desktop-release" workflow; GitHub's Windows machine builds and signs the installer and uploads it.
 
 On a build computer (a host with no Rust and no GitHub): the "release agent" running there (scripts/release-agent.mjs
 in the app's repository) asks this server every few seconds whether a build was requested. The button stores the
@@ -91,15 +93,15 @@ def _agent_status():
     if request.status in (BuildRequest.REQUESTED, BuildRequest.BUILDING):
         if (now - request.updated_at).total_seconds() > STUCK_AFTER:
             request.status, request.finished_at = BuildRequest.FAILED, now
-            request.message = "The build computer stopped answering. Check that it is on and the release agent is running."
+            request.message = "The hosted build runner stopped reporting progress. Check the desktop-release run in GitHub Actions."
             request.save()
         else:
             begun = request.started_at or request.created_at
             if request.status == BuildRequest.REQUESTED:
                 line = (
-                    "Waiting for the build computer to pick it up…"
+                    "Waiting for the hosted runner to pick up the request…"
                     if agent_online()
-                    else "The build computer is off or its release agent is not running. The build starts as soon as it is."
+                    else "The hosted runner checks for queued builds every few minutes. The request stays queued until then."
                 )
             else:
                 line = request.last_line or "Building and signing the installer…"

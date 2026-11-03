@@ -235,8 +235,8 @@ DESKTOP_APP_SOURCE = os.environ.get(
     'GREENDOC_APP_SOURCE', str(_default_app_source) if _default_app_source.is_dir() else ''
 )
 
-# Building the installer on GitHub's free Windows machines, for a host with no Rust (Render). The token needs
-# "Actions: read and write" on the repository. The publish key lets that workflow upload the finished installer.
+# Optional direct GitHub workflow dispatch for a host with no Rust. The hosted polling workflow uses only the
+# shared publish key below, so Render does not need this token.
 GITHUB_TOKEN = os.environ.get('GREENDOC_GITHUB_TOKEN', '')
 GITHUB_REPO = os.environ.get('GREENDOC_GITHUB_REPO', '')  # owner/name
 GITHUB_WORKFLOW = os.environ.get('GREENDOC_GITHUB_WORKFLOW', 'desktop-release.yml')
