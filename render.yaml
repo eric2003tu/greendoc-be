@@ -34,3 +34,15 @@ services:
         sync: false
       - key: GREENDOC_FRONTEND_URL # the website's address, for links in emails
         sync: false
+      # Hosted Windows builds for the desktop app. Configure these in Render after creating
+      # the GitHub Actions secrets described in DEPLOY.md.
+      - key: GREENDOC_GITHUB_TOKEN
+        sync: false
+      - key: GREENDOC_GITHUB_REPO
+        value: eric2003tu/greenleaf-word-studio
+      - key: GREENDOC_GITHUB_REF
+        value: main
+      - key: GREENDOC_GITHUB_WORKFLOW
+        value: desktop-release.yml
+      - key: GREENDOC_PUBLISH_KEY
+        sync: false

@@ -33,13 +33,33 @@ its own disk: the database is a free Postgres (Neon) and the Windows installers 
 - Windows app: put the address in `greenleaf-word-studio/.env.desktop` (`VITE_API_URL=...`).
 - Website: set `VITE_API_URL` to the same address when it is built.
 
-## 5. Publish the Windows app (automatic)
-The server cannot build the installer (no Rust, no signing key). A small "release agent" on your own computer does it:
-in `greenleaf-word-studio` run `npm run agent:install` once. After that an administrator opens `/engine`, presses
-**Publish update**, and the agent builds, signs and uploads the installer; apps update when someone presses the refresh
-button. Needs `GREENDOC_PUBLISH_KEY` on the server (already in `render.env`) and the same value in the app folder's
-`.env.agent`. Details in `greenleaf-word-studio/DESKTOP.md` ("Automatic releases"). Building on GitHub instead is
-described there too.
+## 5. Publish the Windows app online (GitHub Actions)
+
+The API cannot build Windows installers itself. The repository includes a GitHub Actions workflow that builds on
+GitHub's hosted Windows runner, signs the installer and publishes it to the API. Your computer does not need to be
+on, and no release agent command is needed.
+
+One-time setup:
+
+1. Push `greenleaf-word-studio` to `eric2003tu/greenleaf-word-studio` on the `main` branch, including
+   `.github/workflows/desktop-release.yml`.
+2. In that GitHub repository, open **Settings > Secrets and variables > Actions**. Add these repository secrets:
+   - `TAURI_SIGNING_PRIVATE_KEY`: the contents of your existing Tauri private signing key file. Keep it out of git.
+   - `GREENDOC_PUBLISH_KEY`: the same shared publish key configured for the API in Render.
+   - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`: only if the signing key has a password.
+3. In **Actions > Variables**, add the repository variable `GREENDOC_SERVER` with the API's public base URL
+   (for example, `https://greendoc-api.onrender.com`; no trailing slash).
+4. In the Render service's **Environment** settings, add `GREENDOC_GITHUB_TOKEN`: a fine-grained GitHub token
+   scoped only to `eric2003tu/greenleaf-word-studio`, with **Actions: Read and write** permission. Also set
+   `GREENDOC_PUBLISH_KEY` to the same shared key used in the GitHub secret. `GREENDOC_GITHUB_REPO`,
+   `GREENDOC_GITHUB_REF`, and `GREENDOC_GITHUB_WORKFLOW` are supplied by `render.yaml` as
+   `eric2003tu/greenleaf-word-studio`, `main`, and `desktop-release.yml`.
+5. Save the Render environment changes and wait for the service to redeploy. Then an administrator can press
+   **Publish update** on `/engine`; GitHub builds and publishes the update online.
+
+The workflow can also be started manually from the repository's **Actions** tab. See
+`greenleaf-word-studio/DESKTOP.md` for details. The release agent is an optional fallback when hosted builds are
+not configured.
 
 ## Notes
 - Run **one** worker (the start script does): rate limits and sign-in lockouts are counted in memory.
