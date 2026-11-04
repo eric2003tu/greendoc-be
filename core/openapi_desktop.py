@@ -1,4 +1,4 @@
-"""OpenAPI description of the Windows app's update endpoints. Merged into the spec by core.openapi.build_spec."""
+"""OpenAPI description of the desktop app's update endpoints. Merged into the spec by core.openapi.build_spec."""
 
 from .openapi_extra import BOOL, INT, STR, op, path_param, query, s_obj
 
@@ -10,6 +10,7 @@ def build_schemas():
         "DesktopRelease": s_obj(
             {
                 "version": {**STR, "description": "1.2.3"},
+                "platform": STR,
                 "notes": STR,
                 "size": {**INT, "description": "Installer size in bytes."},
                 "createdAt": {"type": "string", "format": "date-time"},
@@ -34,7 +35,7 @@ def build_schemas():
             {"line": STR, "status": {**STR, "enum": ["done", "failed"]}, "message": STR, "version": STR}
         ),
         "DesktopLatest": s_obj(
-            {"available": BOOL, "version": STR, "size": INT, "notes": STR},
+            {"available": BOOL, "version": STR, "platform": STR, "size": INT, "notes": STR},
             description="`available` is false until a version is published.",
         ),
         "DesktopUpdateManifest": s_obj(
@@ -55,21 +56,33 @@ def build_schemas():
 def build_paths():
     return {
         "/api/desktop/latest.json": {
-            "get": op("Desktop app", "Is there a newer Windows app?", "getDesktopUpdate",
+            "get": op("Desktop app", "Is there a newer desktop app?", "getDesktopUpdate",
                       "What the installed app asks. Public. Answers 204 when nothing newer is published. Pass `current` (the "
                       "version the app is running) so an up-to-date copy is not offered its own version.",
                       secured=False, ok="DesktopUpdateManifest", ok_description="A newer version exists.",
-                      params=[query("current", "The version the app is running, such as 0.1.0.")]),
+                      params=[
+                          query("current", "The version the app is running, such as 0.1.0."),
+                          query("platform", "windows-x86_64, darwin-aarch64 or darwin-x86_64."),
+                      ]),
         },
         "/api/desktop/latest/": {
             "get": op("Desktop app", "Is an installer available?", "getDesktopLatest",
-                      "For the website's Install button. Public.", secured=False, ok="DesktopLatest"),
+                      "For the website's Install button. Public.", secured=False, ok="DesktopLatest",
+                      params=[query("platform", "A platform identifier, or all.")]),
         },
         "/api/desktop/download/{version}/": {
             "parameters": [path_param("version", "A version such as 0.2.0, or `latest`.")],
-            "get": op("Desktop app", "Download the Windows installer", "downloadDesktopInstaller",
+            "get": op("Desktop app", "Download a desktop package", "downloadDesktopInstaller",
                       "The installer file. Public.", secured=False, ok=None, ok_code="200",
-                      ok_description="The installer (.exe).", errors=("404",)),
+                      ok_description="The Windows installer or macOS disk image.", errors=("404",),
+                      params=[query("platform", "The package's platform identifier.")]),
+        },
+        "/api/desktop/update/{version}/": {
+            "parameters": [path_param("version", "A version such as 0.2.0, or `latest`.")],
+            "get": op("Desktop app", "Download a desktop update", "downloadDesktopUpdate",
+                      "The signed updater artifact. Public.", secured=False, ok=None, ok_code="200",
+                      ok_description="The signed update payload.", errors=("404",),
+                      params=[query("platform", "The update's platform identifier.")]),
         },
         "/api/desktop/releases/": {
             "get": op("Desktop app", "List published versions", "listDesktopReleases",
@@ -81,7 +94,12 @@ def build_paths():
                        ok="DesktopRelease", ok_code="201", ok_description="Published.", errors=("400", "409"),
                        multipart={"multipart/form-data": {"schema": {
                            "type": "object", "required": ["installer", "manifest"],
-                           "properties": {"installer": BINARY, "manifest": BINARY, "notes": STR}}}}),
+                           "properties": {
+                               "installer": BINARY,
+                               "updater_bundle": BINARY,
+                               "manifest": BINARY,
+                               "notes": STR,
+                           }}}}),
         },
         "/api/desktop/build/": {
             "get": op("Desktop app", "How is the build going?", "getDesktopBuild",
@@ -120,5 +138,5 @@ def build_paths():
 def extend(spec):
     spec["paths"].update(build_paths())
     spec["components"]["schemas"].update(build_schemas())
-    spec["tags"].append({"name": "Desktop app", "description": "Publishing and updating the Windows app."})
+    spec["tags"].append({"name": "Desktop app", "description": "Publishing and updating desktop apps."})
     return spec

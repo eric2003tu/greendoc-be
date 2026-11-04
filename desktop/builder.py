@@ -195,8 +195,8 @@ def _github_status():
     if run["status"] != "completed":
         waiting = run["status"] in ("queued", "requested", "waiting", "pending")
         return {**base, "status": "building", "elapsedSeconds": started,
-                "lastLine": "Waiting for a Windows machine on GitHub…" if waiting
-                else "Building and signing the installer on GitHub…"}
+                "lastLine": "Waiting for a hosted runner on GitHub…" if waiting
+                    else "Building and signing desktop packages on GitHub…"}
     ran_for = max(0, started - _seconds_since(run.get("updated_at")))
     if run.get("conclusion") == "success":
         latest = services.latest_published()

@@ -13,11 +13,12 @@ from .models import BuildRequest, DesktopRelease
 
 @api_view(["GET"])
 def latest_manifest(request):
-    """What the installed app asks: is there a newer version? (Tauri's update file.) Public.
+    """What an installed app asks: is there a newer version for its platform? Public.
 
     204 means "nothing newer". The app passes ?current=<its version>, so an old copy is offered the new
     version and an up-to-date copy is not."""
-    release = services.latest_published()
+    platform = services.platform_from_request(request)
+    release = services.latest_published(platform)
     current = request.GET.get("current", "")
     if release is None or (
         services.VERSION_RE.match(current)
@@ -30,9 +31,13 @@ def latest_manifest(request):
             "notes": release.notes,
             "pub_date": release.created_at.isoformat(),
             "platforms": {
-                services.PLATFORM: {
+                platform: {
                     "signature": release.signature,
-                    "url": request.build_absolute_uri(f"/api/desktop/download/{release.version}/"),
+                    "url": request.build_absolute_uri(
+                        f"/api/desktop/{'update' if platform.startswith('darwin-') else 'download'}"
+                        f"/{release.version}/"
+                        + (f"?platform={platform}" if platform.startswith("darwin-") else "")
+                    ),
                 }
             },
         }
@@ -43,10 +48,13 @@ def latest_manifest(request):
 def download(request, version):
     """The installer file. Public, so the website's Install button and the updater can both use it.
     `latest` means the newest published version."""
+    platform = services.platform_from_request(request)
+    if platform == "all":
+        raise ApiError("Choose a specific platform to download.", code="bad_platform")
     if version == "latest":
-        release = services.latest_published()
+        release = services.latest_published(platform)
     else:
-        release = DesktopRelease.objects.filter(version=version, published=True).first()
+        release = DesktopRelease.objects.filter(version=version, platform=platform, published=True).first()
     if release is None:
         raise ApiError("There is no installer to download yet.", status=404, code="not_found")
     if not isinstance(release.installer.storage, FileSystemStorage):
@@ -56,7 +64,33 @@ def download(request, version):
     return FileResponse(
         release.installer.open("rb"),
         as_attachment=True,
-        filename=f"GreenDoc_{release.version}_x64-setup.exe",
+        filename=release.installer.name.rsplit("/", 1)[-1],
+        content_type="application/octet-stream",
+    )
+
+
+@api_view(["GET"])
+def update_download(request, version):
+    """The updater payload: the Windows installer or signed macOS app archive."""
+    platform = services.platform_from_request(request)
+    if platform == "all":
+        raise ApiError("Choose a specific platform to download.", code="bad_platform")
+    release = (
+        services.latest_published(platform)
+        if version == "latest"
+        else DesktopRelease.objects.filter(version=version, platform=platform, published=True).first()
+    )
+    if release is None:
+        raise ApiError("There is no update to download yet.", status=404, code="not_found")
+    artifact = release.updater_bundle if release.platform.startswith("darwin-") else release.installer
+    if not artifact:
+        raise ApiError("There is no update bundle for this release.", status=404, code="not_found")
+    if not isinstance(artifact.storage, FileSystemStorage):
+        return HttpResponseRedirect(artifact.url)
+    return FileResponse(
+        artifact.open("rb"),
+        as_attachment=True,
+        filename=artifact.name.rsplit("/", 1)[-1],
         content_type="application/octet-stream",
     )
 
@@ -64,11 +98,18 @@ def download(request, version):
 @api_view(["GET"])
 def latest_info(request):
     """For the website: is there an installer, and which version? Public."""
-    release = services.latest_published()
+    platform = services.platform_from_request(request)
+    release = services.latest_published(None if platform == "all" else platform)
     if release is None:
         return JsonResponse({"available": False})
     return JsonResponse(
-        {"available": True, "version": release.version, "size": release.size, "notes": release.notes}
+        {
+            "available": True,
+            "version": release.version,
+            "platform": release.platform,
+            "size": release.size,
+            "notes": release.notes,
+        }
     )
 
 
@@ -92,19 +133,27 @@ def releases(request):
         publisher = _publisher(request)
         installer = request.FILES.get("installer")
         manifest = request.FILES.get("manifest")
+        updater_bundle = request.FILES.get("updater_bundle")
         if installer is None or manifest is None:
             raise ApiError(
-                "Choose both files: the installer (.exe) and latest.json from the same build.",
+                "Choose the installer and latest.json from the same build.",
                 code="missing_files",
             )
-        release = services.publish(installer, manifest, request.POST.get("notes", ""), publisher)
-        latest = services.latest_published()
+        release = services.publish(installer, manifest, request.POST.get("notes", ""), publisher, updater_bundle)
+        latest = services.latest_published(release.platform)
         return JsonResponse(services.dto(release, latest.version if latest else ""), status=201)
     require_admin(request)
-    latest = services.latest_published()
-    latest_version = latest.version if latest else ""
-    rows = sorted(DesktopRelease.objects.all(), key=lambda r: services.version_key(r.version), reverse=True)
-    return JsonResponse({"releases": [services.dto(r, latest_version) for r in rows]})
+    latest_by_platform = {
+        platform: (latest.version if latest else "")
+        for platform, _label in DesktopRelease.PLATFORMS
+        for latest in [services.latest_published(platform)]
+    }
+    rows = sorted(
+        DesktopRelease.objects.all(),
+        key=lambda r: (services.version_key(r.version), r.platform),
+        reverse=True,
+    )
+    return JsonResponse({"releases": [services.dto(r, latest_by_platform[r.platform]) for r in rows]})
 
 
 @api_view(["GET", "POST"])
@@ -121,10 +170,15 @@ def build(request):
 def release(request, version):
     """Administrators: take a version down. Apps that already have it keep working."""
     require_admin(request)
-    row = DesktopRelease.objects.filter(version=version).first()
+    platform = services.platform_from_request(request)
+    if platform == "all":
+        raise ApiError("Choose a specific platform to remove.", code="bad_platform")
+    row = DesktopRelease.objects.filter(version=version, platform=platform).first()
     if row is None:
         raise ApiError("No such version.", status=404, code="not_found")
     row.installer.delete(save=False)
+    if row.updater_bundle:
+        row.updater_bundle.delete(save=False)
     row.delete()
     return HttpResponse(status=204)
 

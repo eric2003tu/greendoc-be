@@ -30,14 +30,14 @@ its own disk: the database is a free Postgres (Neon) and the Windows installers 
    Your API address is `https://greendoc-api.onrender.com` (or the name Render gives it).
 
 ## 4. Point the apps at it
-- Windows app: put the address in `greenleaf-word-studio/.env.desktop` (`VITE_API_URL=...`).
+- Desktop apps: put the address in `greenleaf-word-studio/.env.desktop` (`VITE_API_URL=...`).
 - Website: set `VITE_API_URL` to the same address when it is built.
 
-## 5. Publish the Windows app online (GitHub Actions)
+## 5. Publish desktop apps online (GitHub Actions)
 
-The API cannot build Windows installers itself. When an administrator presses **Publish update**, the API
-dispatches a GitHub Actions workflow. GitHub's hosted Windows runner builds, signs and publishes the installer.
-Your computer does not need to be on.
+The API cannot build desktop packages itself. When an administrator presses **Publish update**, the API
+dispatches a GitHub Actions workflow. Hosted Windows and macOS runners build and publish Windows, Apple Silicon,
+and Intel Mac packages. Your computer does not need to be on.
 
 One-time setup:
 
@@ -54,8 +54,12 @@ One-time setup:
    key used in the GitHub secret. Set `GREENDOC_GITHUB_REPO` to `eric2003tu/greenleaf-word-studio`,
    `GREENDOC_GITHUB_REF` to `main`, and `GREENDOC_GITHUB_WORKFLOW` to `desktop-release.yml` (the Render blueprint
    supplies these values except the two secrets).
-5. Save the Render environment changes and wait for the service to redeploy. Then an administrator can press
-   **Publish update** on `/engine`; the API starts the hosted build immediately.
+5. Deploy the API changes and apply the new desktop-release migration, then save the Render environment changes
+   and wait for the service to redeploy. An administrator can then press **Publish update** on `/engine`; the API
+   starts the hosted multi-platform build immediately.
+
+The Mac DMGs are not signed or notarized by Apple, so macOS asks the user to approve the app on its first
+launch. No Apple Developer secrets are needed for these builds.
 
 The workflow can also be started manually from the repository's **Actions** tab. See
 `greenleaf-word-studio/DESKTOP.md` for details. The local release agent remains an optional alternative.

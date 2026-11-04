@@ -1,4 +1,4 @@
-"""Publishing and finding versions of the Windows app."""
+"""Publishing and finding versions of the desktop app."""
 import base64
 import binascii
 import json
@@ -6,13 +6,15 @@ import re
 
 from core.http import ApiError
 
-from .models import DesktopRelease
+from .models import DesktopRelease, installer_filename
 
-PLATFORM = "windows-x86_64"
+WINDOWS_X64 = DesktopRelease.WINDOWS_X64
+MACOS_ARM64 = DesktopRelease.MACOS_ARM64
+MACOS_X64 = DesktopRelease.MACOS_X64
+PLATFORMS = {platform for platform, _label in DesktopRelease.PLATFORMS}
 VERSION_RE = re.compile(r"^\d{1,4}\.\d{1,4}\.\d{1,4}$")
-INSTALLER_NAME_RE = re.compile(r"^GreenDoc_(\d{1,4}\.\d{1,4}\.\d{1,4})_x64-setup\.exe$")
 MIN_INSTALLER = 1_000_000
-MAX_INSTALLER = 300 * 1024 * 1024
+MAX_ARTIFACT = 300 * 1024 * 1024
 MAX_MANIFEST = 64 * 1024
 MAX_NOTES = 2000
 
@@ -21,22 +23,33 @@ def version_key(version):
     return tuple(int(part) for part in version.split("."))
 
 
-def latest_published():
+def latest_published(platform=WINDOWS_X64):
     rows = DesktopRelease.objects.filter(published=True)
+    if platform:
+        rows = rows.filter(platform=platform)
     return max(rows, key=lambda r: version_key(r.version), default=None)
 
 
+def platform_from_request(request, default=WINDOWS_X64):
+    platform = request.GET.get("platform", default)
+    if platform not in PLATFORMS and platform != "all":
+        raise ApiError("Choose a supported desktop platform.", code="bad_platform")
+    return platform
+
+
 def read_manifest(upload):
-    """The version, signature and notes from the latest.json the build wrote."""
+    """The version, platform, signature and notes from the latest.json the build wrote."""
     if upload.size > MAX_MANIFEST:
         raise ApiError("That does not look like latest.json (too large).", code="bad_manifest")
     try:
         data = json.loads(upload.read().decode("utf-8"))
         version = data["version"]
-        signature = data["platforms"][PLATFORM]["signature"]
-    except (ValueError, UnicodeDecodeError, KeyError, TypeError):
+        platforms = data["platforms"]
+        platform = next(key for key in platforms if key in PLATFORMS)
+        signature = platforms[platform]["signature"]
+    except (ValueError, UnicodeDecodeError, KeyError, TypeError, StopIteration):
         raise ApiError(
-            "latest.json is not a GreenDoc update file. Upload the latest.json the build produced.",
+            "latest.json is not a GreenDoc update file for a supported platform.",
             code="bad_manifest",
         )
     if not isinstance(version, str) or not VERSION_RE.match(version):
@@ -44,7 +57,7 @@ def read_manifest(upload):
     if not isinstance(signature, str) or not _looks_like_signature(signature):
         raise ApiError("The signature in latest.json is missing or damaged.", code="bad_manifest")
     notes = data.get("notes", "")
-    return version, signature.strip(), notes if isinstance(notes, str) else ""
+    return version, platform, signature.strip(), notes if isinstance(notes, str) else ""
 
 
 def _looks_like_signature(text):
@@ -54,44 +67,77 @@ def _looks_like_signature(text):
         return False
 
 
-def check_installer(upload, version):
-    match = INSTALLER_NAME_RE.match(upload.name or "")
-    if not match:
-        raise ApiError(
-            "The installer should be named like GreenDoc_0.1.1_x64-setup.exe, as the build made it.",
-            code="bad_installer",
-        )
-    if match.group(1) != version:
+def _check_file_size(upload, lower=MIN_INSTALLER):
+    if upload.size < lower or upload.size > MAX_ARTIFACT:
+        raise ApiError("The installer has an unexpected size.", code="bad_installer")
+
+
+def check_installer(upload, version, platform):
+    filename = upload.name or ""
+    suffix = {
+        WINDOWS_X64: r"x64-setup\.exe",
+        MACOS_ARM64: r"aarch64\.dmg",
+        MACOS_X64: r"x64\.dmg",
+    }[platform]
+    match = re.fullmatch(rf"GreenDoc_(\d{{1,4}}\.\d{{1,4}}\.\d{{1,4}})_{suffix}", filename)
+    if match and match.group(1) != version:
         raise ApiError(
             f"The installer is version {match.group(1)} but latest.json says {version}. "
             "Upload the two files from the same build.",
             code="version_mismatch",
         )
-    if upload.size < MIN_INSTALLER or upload.size > MAX_INSTALLER:
-        raise ApiError("The installer has an unexpected size.", code="bad_installer")
-    if upload.read(2) != b"MZ":
+    if filename != installer_filename(version, platform):
+        raise ApiError(
+            f"The installer should be named {installer_filename(version, platform)}, as the build made it.",
+            code="bad_installer",
+        )
+    _check_file_size(upload)
+    if platform == WINDOWS_X64 and upload.read(2) != b"MZ":
         raise ApiError("That file is not a Windows installer.", code="bad_installer")
+    if platform.startswith("darwin-"):
+        upload.seek(-512, 2)
+        if upload.read(4) != b"koly":
+            raise ApiError("That file is not a macOS disk image.", code="bad_installer")
     upload.seek(0)
 
 
-def publish(installer, manifest, notes, email):
-    version, signature, manifest_notes = read_manifest(manifest)
-    check_installer(installer, version)
-    if DesktopRelease.objects.filter(version=version).exists():
-        raise ApiError(f"Version {version} has already been published.", status=409, code="version_exists")
-    newest = latest_published()
+def check_updater_bundle(upload, platform):
+    if platform.startswith("darwin-"):
+        if upload is None:
+            raise ApiError("Choose the signed .app.tar.gz update bundle too.", code="missing_files")
+        _check_file_size(upload)
+        if not (upload.name or "").endswith(".app.tar.gz") or upload.read(2) != b"\x1f\x8b":
+            raise ApiError("That file is not a macOS updater bundle.", code="bad_installer")
+        upload.seek(0)
+    elif upload is not None:
+        raise ApiError("Windows releases do not use a separate updater bundle.", code="bad_installer")
+
+
+def publish(installer, manifest, notes, email, updater_bundle=None):
+    version, platform, signature, manifest_notes = read_manifest(manifest)
+    check_installer(installer, version, platform)
+    check_updater_bundle(updater_bundle, platform)
+    if DesktopRelease.objects.filter(version=version, platform=platform).exists():
+        raise ApiError(
+            f"Version {version} for {platform} has already been published.",
+            status=409,
+            code="version_exists",
+        )
+    newest = latest_published(platform)
     if newest and version_key(version) <= version_key(newest.version):
         raise ApiError(
-            f"Version {version} is not newer than the published {newest.version}. "
-            "Build again (the build raises the number for you) and upload that.",
+            f"Version {version} is not newer than the published {newest.version} for {platform}. "
+            "Build again and upload that.",
             status=409,
             code="not_newer",
         )
     return DesktopRelease.objects.create(
         version=version,
+        platform=platform,
         notes=(notes or manifest_notes).strip()[:MAX_NOTES],
         signature=signature,
         installer=installer,
+        updater_bundle=updater_bundle or "",
         size=installer.size,
         created_by=email,
     )
@@ -100,6 +146,7 @@ def publish(installer, manifest, notes, email):
 def dto(release, latest_version):
     return {
         "version": release.version,
+        "platform": release.platform,
         "notes": release.notes,
         "size": release.size,
         "createdAt": release.created_at.isoformat(),
